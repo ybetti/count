@@ -1,0 +1,2287 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>麻雀 - 簡易版</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a472a; font-family: 'Hiragino Sans','Yu Gothic UI','Meiryo',sans-serif;
+  color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+  user-select: none; overflow-x: hidden;
+}
+#app { width: 100%; max-width: 960px; margin: 0 auto; }
+
+/* Info Bar */
+#info-bar {
+  background: #1a1a2e; padding: 8px 16px; display: flex; align-items: center;
+  gap: 16px; font-size: 14px; border-bottom: 2px solid #e6c200;
+  flex-wrap: wrap; justify-content: center;
+}
+#info-bar .info-item { display: flex; align-items: center; gap: 4px; }
+#info-bar .label { color: #aaa; }
+#info-bar .value { color: #fff; font-weight: bold; }
+.dora-tiles { display: inline-flex; gap: 2px; vertical-align: middle; }
+
+/* Game Board */
+#game-board { background: #0d5c35; padding: 10px; position: relative; min-height: 480px; }
+
+/* CPU Areas */
+.cpu-area {
+  background: rgba(0,0,0,0.15); border-radius: 6px; padding: 6px 10px; margin-bottom: 6px;
+}
+.cpu-row { display: flex; gap: 8px; margin-bottom: 6px; }
+.cpu-row .cpu-area { flex: 1; }
+.player-label {
+  font-size: 12px; color: #ccc; margin-bottom: 4px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.player-label .wind-badge {
+  background: #e6c200; color: #1a1a2e; padding: 1px 6px; border-radius: 3px;
+  font-weight: bold; font-size: 11px;
+}
+.player-label .score { color: #ffd700; font-weight: bold; }
+.player-label .riichi-mark { color: #ff4444; font-weight: bold; margin-left: 4px; }
+.cpu-hand { display: flex; flex-wrap: wrap; gap: 1px; margin-bottom: 4px; }
+.cpu-melds { display: inline-flex; gap: 1px; margin-left: 6px; }
+.cpu-discards { display: flex; flex-wrap: wrap; gap: 1px; max-width: 100%; }
+
+/* Discard Area (center) */
+#player-discard-area {
+  background: rgba(0,0,0,0.1); border-radius: 6px; padding: 6px 10px; margin-bottom: 6px;
+}
+#player-discard-area .section-label { font-size: 11px; color: #aaa; margin-bottom: 3px; }
+.discard-row { display: flex; flex-wrap: wrap; gap: 1px; }
+
+/* Player Area */
+#player-area {
+  background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px;
+  border: 2px solid rgba(230,194,0,0.3);
+}
+#player-info {
+  font-size: 13px; margin-bottom: 6px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+#player-hand-row { display: flex; align-items: flex-end; flex-wrap: wrap; }
+#player-hand { display: flex; gap: 2px; flex-wrap: wrap; }
+#player-draw { margin-left: 12px; }
+#player-melds { display: inline-flex; gap: 2px; margin-left: 10px; }
+
+/* Tiles */
+.tile {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 36px; height: 50px;
+  background: linear-gradient(to bottom, #fffff8, #f0e8d0);
+  border: 1px solid #888; border-radius: 3px;
+  font-weight: bold; box-shadow: 1px 2px 3px rgba(0,0,0,0.3);
+  position: relative; transition: transform 0.12s, box-shadow 0.12s;
+  flex-shrink: 0;
+}
+.tile .t-top { font-size: 15px; line-height: 1.1; }
+.tile .t-bot { font-size: 12px; line-height: 1.1; }
+.tile .t-char { font-size: 22px; }
+.tile.man .t-top, .tile.man .t-bot { color: #cc0000; }
+.tile.pin .t-top, .tile.pin .t-bot { color: #0000cc; }
+.tile.sou .t-top, .tile.sou .t-bot { color: #008800; }
+.tile.jihai .t-char { color: #222; }
+.tile.hatsu .t-char { color: #008800; }
+.tile.chun .t-char { color: #cc0000; }
+.tile.haku .t-char { color: #888; }
+.tile.clickable { cursor: pointer; }
+.tile.clickable:hover { transform: translateY(-10px); box-shadow: 2px 6px 10px rgba(0,0,0,0.4); z-index: 10; }
+.tile.selected { transform: translateY(-10px); box-shadow: 0 0 8px #ffd700; border-color: #ffd700; }
+.tile.facedown {
+  background: linear-gradient(135deg, #1a7a4a 25%, #158040 50%, #1a7a4a 75%);
+  border-color: #0a5530;
+}
+.tile.facedown .t-top, .tile.facedown .t-bot, .tile.facedown .t-char { display: none; }
+.tile.sm { width: 26px; height: 36px; }
+.tile.sm .t-top { font-size: 11px; }
+.tile.sm .t-bot { font-size: 9px; }
+.tile.sm .t-char { font-size: 16px; }
+.tile.discard-tile { width: 28px; height: 38px; }
+.tile.discard-tile .t-top { font-size: 12px; }
+.tile.discard-tile .t-bot { font-size: 10px; }
+.tile.discard-tile .t-char { font-size: 17px; }
+.tile.sideways {
+  transform: rotate(90deg); margin: 0 6px;
+}
+.tile.last-discard { border-color: #ff4444; box-shadow: 0 0 6px rgba(255,68,68,0.5); }
+.tile.meld-tile { width: 30px; height: 42px; }
+.tile.meld-tile .t-top { font-size: 12px; }
+.tile.meld-tile .t-bot { font-size: 10px; }
+.tile.meld-tile .t-char { font-size: 18px; }
+.meld-group {
+  display: inline-flex; gap: 1px; margin-left: 6px;
+  border-left: 2px solid rgba(255,255,255,0.2); padding-left: 4px;
+}
+
+/* Action Bar */
+#action-bar {
+  background: #1a1a2e; padding: 10px; display: flex; gap: 8px;
+  justify-content: center; flex-wrap: wrap; min-height: 52px; align-items: center;
+}
+.action-btn {
+  padding: 8px 20px; border: none; border-radius: 6px; font-size: 15px;
+  font-weight: bold; cursor: pointer; transition: background 0.15s, transform 0.1s;
+}
+.action-btn:hover { transform: scale(1.05); }
+.action-btn:active { transform: scale(0.95); }
+.btn-tsumo { background: #e6c200; color: #1a1a2e; }
+.btn-ron { background: #ff4444; color: #fff; }
+.btn-riichi { background: #4488ff; color: #fff; }
+.btn-pon { background: #44aa44; color: #fff; }
+.btn-chi { background: #aa44aa; color: #fff; }
+.btn-skip { background: #555; color: #ddd; }
+.btn-kan { background: #aa8800; color: #fff; }
+#action-msg { color: #aaa; font-size: 14px; }
+
+/* Modal */
+#modal-overlay {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7); z-index: 100;
+  justify-content: center; align-items: center;
+}
+#modal-overlay.show { display: flex; }
+#modal-box {
+  background: #1a1a2e; border: 2px solid #e6c200; border-radius: 12px;
+  padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+  text-align: center;
+}
+#modal-box h2 { color: #e6c200; margin-bottom: 16px; font-size: 24px; }
+#modal-box .yaku-list { text-align: left; margin: 12px auto; max-width: 300px; }
+#modal-box .yaku-item { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #333; }
+#modal-box .yaku-name { color: #ddd; }
+#modal-box .yaku-han { color: #ffd700; font-weight: bold; }
+#modal-box .score-total { font-size: 28px; color: #ff4444; font-weight: bold; margin: 12px 0; }
+#modal-box .score-detail { color: #aaa; font-size: 14px; margin-bottom: 8px; }
+#modal-box .hand-display { display: flex; gap: 2px; justify-content: center; flex-wrap: wrap; margin: 12px 0; }
+.modal-btn {
+  padding: 10px 32px; border: none; border-radius: 6px; font-size: 16px;
+  font-weight: bold; cursor: pointer; background: #e6c200; color: #1a1a2e;
+  margin-top: 12px;
+}
+.modal-btn:hover { background: #ffd700; }
+
+/* Chi selection */
+.chi-options { display: flex; gap: 12px; justify-content: center; margin: 12px 0; flex-wrap: wrap; }
+.chi-option {
+  display: flex; gap: 2px; padding: 6px; border: 2px solid #555; border-radius: 6px;
+  cursor: pointer; transition: border-color 0.15s;
+}
+.chi-option:hover { border-color: #e6c200; }
+
+/* Start screen */
+#start-screen {
+  text-align: center; padding: 60px 20px;
+}
+#start-screen h1 { font-size: 48px; color: #e6c200; margin-bottom: 8px; }
+#start-screen p { color: #aaa; margin-bottom: 30px; font-size: 16px; }
+.start-btn {
+  padding: 16px 48px; border: none; border-radius: 8px;
+  font-size: 20px; font-weight: bold; cursor: pointer;
+  background: #e6c200; color: #1a1a2e; transition: transform 0.15s;
+}
+.start-btn:hover { transform: scale(1.05); background: #ffd700; }
+
+/* Game over */
+.final-scores { margin: 16px 0; }
+.final-row {
+  display: flex; justify-content: space-between; padding: 6px 12px;
+  border-bottom: 1px solid #333; font-size: 16px;
+}
+.final-row.winner { color: #ffd700; font-weight: bold; }
+
+/* Calculator Screen */
+#calc-screen {
+  display: none; width: 100%; max-width: 960px; margin: 0 auto;
+  background: #1a1a2e; min-height: 100vh;
+}
+#calc-screen.show { display: block; }
+.calc-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; border-bottom: 2px solid #e6c200;
+}
+.calc-header h2 { color: #e6c200; font-size: 20px; margin: 0; }
+.calc-btn {
+  padding: 6px 16px; border: none; border-radius: 6px; font-size: 14px;
+  font-weight: bold; cursor: pointer; transition: background 0.15s, transform 0.1s;
+}
+.calc-btn:hover { transform: scale(1.05); }
+.calc-btn-back { background: #555; color: #ddd; }
+.calc-btn-clear { background: #aa4444; color: #fff; }
+
+/* Hand display area */
+.calc-section { padding: 12px 16px; border-bottom: 1px solid #333; }
+.calc-section-label { font-size: 13px; color: #aaa; margin-bottom: 6px; }
+.calc-hand-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.calc-hand-info .count { color: #e6c200; font-weight: bold; }
+.calc-hand-info .win-tile-label { color: #aaa; font-size: 13px; }
+.calc-hand-info .win-tile-label .set { color: #ff4444; font-weight: bold; }
+.calc-hand-area {
+  display: flex; flex-wrap: wrap; gap: 3px; min-height: 54px;
+  background: rgba(0,0,0,0.2); border-radius: 6px; padding: 6px;
+  align-items: center;
+}
+.calc-hand-area .tile { cursor: pointer; position: relative; }
+.calc-hand-area .tile:hover { transform: translateY(-6px); }
+.calc-hand-area .tile.win-tile {
+  border: 2px solid #ff4444; box-shadow: 0 0 8px rgba(255,68,68,0.6);
+}
+.tile-remove {
+  position: absolute; top: -6px; left: -6px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #cc3333; color: #fff; border: 1px solid #991111;
+  font-size: 12px; line-height: 16px; text-align: center;
+  cursor: pointer; z-index: 20; display: none;
+}
+.calc-hand-area .tile:hover .tile-remove { display: block; }
+.tile-remove:hover { background: #ff4444; transform: scale(1.2); }
+
+/* Meld display */
+.calc-melds-row {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px;
+}
+.calc-meld-group {
+  display: inline-flex; gap: 1px; padding: 4px 6px;
+  border: 1px solid #555; border-radius: 4px; cursor: pointer;
+  transition: border-color 0.15s;
+}
+.calc-meld-group:hover { border-color: #ff4444; }
+.calc-meld-label { font-size: 11px; color: #888; margin-right: 2px; align-self: center; }
+.calc-meld-btns { display: flex; gap: 6px; }
+.calc-meld-btn {
+  padding: 4px 12px; border: 1px solid #555; border-radius: 4px;
+  background: #2a2a4e; color: #ddd; font-size: 13px; cursor: pointer;
+  transition: background 0.15s;
+}
+.calc-meld-btn:hover { background: #3a3a6e; border-color: #e6c200; }
+.calc-meld-btn.active { background: #4a4a8e; border-color: #e6c200; color: #e6c200; }
+
+/* Tile picker */
+.calc-picker { padding: 12px 16px; }
+.calc-picker-row { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; align-items: center; }
+.calc-picker-row .row-label {
+  font-size: 12px; color: #aaa; width: 28px; text-align: center; flex-shrink: 0;
+}
+.calc-picker .tile { cursor: pointer; position: relative; }
+.calc-picker .tile:hover { transform: translateY(-6px); box-shadow: 2px 4px 8px rgba(0,0,0,0.4); }
+.calc-picker .tile.disabled {
+  opacity: 0.3; pointer-events: none; cursor: default;
+}
+.tile-badge {
+  position: absolute; top: -4px; right: -4px;
+  background: #e6c200; color: #1a1a2e; font-size: 10px; font-weight: bold;
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+
+/* Options */
+.calc-options { padding: 12px 16px; border-bottom: 1px solid #333; }
+.calc-opt-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; align-items: center; }
+.calc-opt-label { font-size: 13px; color: #aaa; width: 60px; flex-shrink: 0; }
+.calc-opt-group { display: flex; gap: 4px; }
+.calc-opt-btn {
+  padding: 5px 14px; border: 1px solid #555; border-radius: 4px;
+  background: #2a2a4e; color: #ddd; font-size: 13px; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.calc-opt-btn:hover { border-color: #e6c200; }
+.calc-opt-btn.selected { background: #e6c200; color: #1a1a2e; border-color: #e6c200; font-weight: bold; }
+
+/* Calculate button */
+.calc-submit { padding: 16px; text-align: center; }
+.calc-submit-btn {
+  padding: 12px 48px; border: none; border-radius: 8px;
+  font-size: 18px; font-weight: bold; cursor: pointer;
+  background: #e6c200; color: #1a1a2e; transition: transform 0.15s;
+}
+.calc-submit-btn:hover { transform: scale(1.05); background: #ffd700; }
+
+/* Result */
+.calc-result { padding: 16px; display: none; }
+.calc-result.show { display: block; }
+.calc-result-inner {
+  background: rgba(0,0,0,0.3); border-radius: 8px; padding: 16px; text-align: center;
+  border: 1px solid #444;
+}
+.calc-result .error-msg { color: #ff6666; font-size: 15px; }
+.calc-result .yaku-list { text-align: left; margin: 8px auto; max-width: 280px; }
+.calc-result .yaku-item {
+  display: flex; justify-content: space-between; padding: 3px 0;
+  border-bottom: 1px solid #333;
+}
+.calc-result .yaku-name { color: #ddd; font-size: 14px; }
+.calc-result .yaku-han { color: #ffd700; font-weight: bold; font-size: 14px; }
+.calc-result .score-label { color: #aaa; font-size: 14px; margin-top: 8px; }
+.calc-result .score-total { font-size: 28px; color: #ff4444; font-weight: bold; margin: 4px 0; }
+.calc-result .score-detail { color: #aaa; font-size: 13px; }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .tile { width: 30px; height: 42px; }
+  .tile .t-top { font-size: 13px; }
+  .tile .t-bot { font-size: 10px; }
+  .tile .t-char { font-size: 18px; }
+  .tile.sm { width: 22px; height: 30px; }
+  .tile.sm .t-top { font-size: 9px; }
+  .tile.sm .t-bot { font-size: 7px; }
+  .tile.sm .t-char { font-size: 13px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="info-bar">
+    <div class="info-item"><span class="label">場風:</span><span class="value" id="ib-round"></span></div>
+    <div class="info-item"><span class="label">局:</span><span class="value" id="ib-kyoku"></span></div>
+    <div class="info-item"><span class="label">本場:</span><span class="value" id="ib-honba"></span></div>
+    <div class="info-item"><span class="label">残り:</span><span class="value" id="ib-remain"></span></div>
+    <div class="info-item"><span class="label">ドラ:</span><span class="dora-tiles" id="ib-dora"></span></div>
+    <div class="info-item"><span class="label">供託:</span><span class="value" id="ib-riichi-sticks"></span></div>
+  </div>
+  <div id="game-board">
+    <div id="cpu2-area" class="cpu-area"></div>
+    <div class="cpu-row">
+      <div id="cpu3-area" class="cpu-area"></div>
+      <div id="cpu1-area" class="cpu-area"></div>
+    </div>
+    <div id="player-discard-area">
+      <div class="section-label">あなたの捨牌</div>
+      <div class="discard-row" id="player-discards"></div>
+    </div>
+    <div id="player-area">
+      <div id="player-info"></div>
+      <div id="player-hand-row">
+        <div id="player-hand"></div>
+        <div id="player-draw"></div>
+        <div id="player-melds"></div>
+      </div>
+    </div>
+  </div>
+  <div id="action-bar"><span id="action-msg"></span></div>
+  <div id="modal-overlay"><div id="modal-box"></div></div>
+</div>
+
+<div id="calc-screen">
+  <div class="calc-header">
+    <button class="calc-btn calc-btn-back" id="calc-back">← 戻る</button>
+    <h2>点数計算</h2>
+    <button class="calc-btn calc-btn-clear" id="calc-clear">クリア</button>
+  </div>
+  <div class="calc-section">
+    <div class="calc-hand-info">
+      <span>手牌 (<span class="count" id="calc-tile-count">0</span>/14)</span>
+      <span class="win-tile-label">和了牌: <span id="calc-win-tile-display">未選択</span></span>
+    </div>
+    <div class="calc-hand-area" id="calc-hand-area"></div>
+    <div class="calc-melds-row" id="calc-melds-row">
+      <div class="calc-meld-btns">
+        <button class="calc-meld-btn" id="calc-add-pon">+ポン</button>
+        <button class="calc-meld-btn" id="calc-add-chi">+チー</button>
+      </div>
+    </div>
+  </div>
+  <div class="calc-picker" id="calc-picker"></div>
+  <div class="calc-options">
+    <div class="calc-opt-row">
+      <span class="calc-opt-label">和了:</span>
+      <div class="calc-opt-group" data-opt="winMethod">
+        <button class="calc-opt-btn selected" data-val="tsumo">ツモ</button>
+        <button class="calc-opt-btn" data-val="ron">ロン</button>
+      </div>
+    </div>
+    <div class="calc-opt-row">
+      <span class="calc-opt-label">親子:</span>
+      <div class="calc-opt-group" data-opt="isDealer">
+        <button class="calc-opt-btn" data-val="true">親</button>
+        <button class="calc-opt-btn selected" data-val="false">子</button>
+      </div>
+    </div>
+    <div class="calc-opt-row">
+      <span class="calc-opt-label">場風:</span>
+      <div class="calc-opt-group" data-opt="roundWind">
+        <button class="calc-opt-btn selected" data-val="0">東</button>
+        <button class="calc-opt-btn" data-val="1">南</button>
+      </div>
+    </div>
+    <div class="calc-opt-row">
+      <span class="calc-opt-label">自風:</span>
+      <div class="calc-opt-group" data-opt="seatWind">
+        <button class="calc-opt-btn selected" data-val="0">東</button>
+        <button class="calc-opt-btn" data-val="1">南</button>
+        <button class="calc-opt-btn" data-val="2">西</button>
+        <button class="calc-opt-btn" data-val="3">北</button>
+      </div>
+    </div>
+    <div class="calc-opt-row">
+      <span class="calc-opt-label">リーチ:</span>
+      <div class="calc-opt-group" data-opt="riichi">
+        <button class="calc-opt-btn selected" data-val="false">なし</button>
+        <button class="calc-opt-btn" data-val="true">あり</button>
+      </div>
+    </div>
+  </div>
+  <div class="calc-submit">
+    <button class="calc-submit-btn" id="calc-calculate">計算する</button>
+  </div>
+  <div class="calc-result" id="calc-result">
+    <div class="calc-result-inner" id="calc-result-inner"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ============================================================
+//  CONSTANTS
+// ============================================================
+const NUM_KANJI = ['一','二','三','四','五','六','七','八','九'];
+const SUIT_NAMES = ['萬','筒','索'];
+const WIND_KANJI = ['東','南','西','北'];
+const DRAGON_KANJI = ['白','發','中'];
+const SEAT_NAMES = ['あなた','CPU1','CPU2','CPU3'];
+
+const S_MAN = 0, S_PIN = 1, S_SOU = 2, S_JIHAI = 3;
+
+function tSuit(t) { return t < 9 ? S_MAN : t < 18 ? S_PIN : t < 27 ? S_SOU : S_JIHAI; }
+function tNum(t) { return t < 27 ? (t % 9) + 1 : 0; }
+function isTerminal(t) { if (t >= 27) return false; const n = t % 9; return n === 0 || n === 8; }
+function isHonor(t) { return t >= 27; }
+function isYaochu(t) { return isTerminal(t) || isHonor(t); }
+function isDragon(t) { return t >= 31; }
+function isWind(t) { return t >= 27 && t < 31; }
+function uid2type(uid) { return uid >> 2; }
+
+function tileName(t) {
+  if (t < 27) return NUM_KANJI[t % 9] + SUIT_NAMES[tSuit(t)];
+  if (t < 31) return WIND_KANJI[t - 27];
+  return DRAGON_KANJI[t - 31];
+}
+
+function doraFromIndicator(t) {
+  if (t < 27) { const s = Math.floor(t / 9) * 9; return s + (t % 9 + 1) % 9; }
+  if (t < 31) return 27 + (t - 27 + 1) % 4;
+  return 31 + (t - 31 + 1) % 3;
+}
+
+// ============================================================
+//  TILE ELEMENT CREATION
+// ============================================================
+function createTileEl(typeId, opts = {}) {
+  const d = document.createElement('div');
+  d.className = 'tile';
+  if (opts.facedown) { d.classList.add('facedown'); if (opts.sm) d.classList.add('sm'); return d; }
+  if (opts.sm) d.classList.add('sm');
+  if (opts.discard) d.classList.add('discard-tile');
+  if (opts.meld) d.classList.add('meld-tile');
+  if (opts.clickable) d.classList.add('clickable');
+  if (opts.sideways) d.classList.add('sideways');
+  if (opts.lastDiscard) d.classList.add('last-discard');
+
+  const suit = tSuit(typeId);
+  if (suit === S_JIHAI) {
+    const idx = typeId - 27;
+    if (idx < 4) d.classList.add('jihai');
+    else if (idx === 4) d.classList.add('haku');
+    else if (idx === 5) d.classList.add('hatsu');
+    else d.classList.add('chun');
+    d.innerHTML = `<span class="t-char">${typeId < 31 ? WIND_KANJI[typeId-27] : DRAGON_KANJI[typeId-31]}</span>`;
+  } else {
+    d.classList.add(['man','pin','sou'][suit]);
+    d.innerHTML = `<span class="t-top">${NUM_KANJI[typeId % 9]}</span><span class="t-bot">${SUIT_NAMES[suit]}</span>`;
+  }
+  return d;
+}
+
+// ============================================================
+//  WALL
+// ============================================================
+class Wall {
+  constructor() {
+    const a = [];
+    for (let i = 0; i < 136; i++) a.push(i);
+    for (let i = 135; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+    this.deadWall = a.splice(-14, 14);
+    this.tiles = a;
+    this.pos = 0;
+    this.doraCount = 1;
+  }
+  draw() { return this.pos < this.tiles.length ? this.tiles[this.pos++] : -1; }
+  remaining() { return this.tiles.length - this.pos; }
+  getDoraIndicators() { return this.deadWall.slice(0, this.doraCount); }
+  getDoraTypes() { return this.getDoraIndicators().map(uid => doraFromIndicator(uid2type(uid))); }
+}
+
+// ============================================================
+//  HAND & MELD
+// ============================================================
+class Meld {
+  constructor(type, tiles, open, fromWho) {
+    this.type = type; // 'chi','pon','ankan','minkan'
+    this.tiles = tiles; // array of uid
+    this.open = open;
+    this.fromWho = fromWho;
+  }
+  typeIds() { return this.tiles.map(uid2type); }
+}
+
+class Hand {
+  constructor() { this.closed = []; this.melds = []; this.discards = []; }
+  add(uid) { this.closed.push(uid); this.sortClosed(); }
+  remove(uid) { const i = this.closed.indexOf(uid); if (i >= 0) this.closed.splice(i, 1); }
+  sortClosed() { this.closed.sort((a,b) => uid2type(a) - uid2type(b)); }
+  isMenzen() { return this.melds.every(m => !m.open); }
+  counts() {
+    const c = new Int32Array(34);
+    for (const uid of this.closed) c[uid2type(uid)]++;
+    return c;
+  }
+  allTypeIds() {
+    const c = this.counts();
+    for (const m of this.melds) for (const t of m.typeIds()) c[t]++;
+    return c;
+  }
+}
+
+// ============================================================
+//  PLAYER
+// ============================================================
+class Player {
+  constructor(seat, isHuman) {
+    this.seat = seat;
+    this.isHuman = isHuman;
+    this.hand = new Hand();
+    this.score = 25000;
+    this.seatWind = 0;
+    this.isRiichi = false;
+    this.riichiTurn = -1;
+    this.ippatsu = false;
+    this.lastDraw = -1;
+  }
+  reset() {
+    this.hand = new Hand();
+    this.isRiichi = false;
+    this.riichiTurn = -1;
+    this.ippatsu = false;
+    this.lastDraw = -1;
+  }
+}
+
+// ============================================================
+//  WIN DETECTION
+// ============================================================
+function canWin(counts) {
+  // Seven pairs
+  if (isSevenPairs(counts)) return true;
+  // Regular: pair + 4 mentsu
+  for (let i = 0; i < 34; i++) {
+    if (counts[i] >= 2) {
+      counts[i] -= 2;
+      const ok = decomposeMentsu(counts, 0);
+      counts[i] += 2;
+      if (ok) return true;
+    }
+  }
+  return false;
+}
+
+function isSevenPairs(c) {
+  let p = 0;
+  for (let i = 0; i < 34; i++) { if (c[i] === 2) p++; else if (c[i] !== 0) return false; }
+  return p === 7;
+}
+
+function decomposeMentsu(c, found) {
+  if (found === 4) { for (let i = 0; i < 34; i++) if (c[i] !== 0) return false; return true; }
+  let i = 0; while (i < 34 && c[i] === 0) i++;
+  if (i >= 34) return found === 4;
+  // Koutsu
+  if (c[i] >= 3) { c[i]-=3; if (decomposeMentsu(c, found+1)) { c[i]+=3; return true; } c[i]+=3; }
+  // Shuntsu
+  if (i < 27 && i%9 <= 6 && c[i+1]>=1 && c[i+2]>=1) {
+    c[i]--; c[i+1]--; c[i+2]--;
+    if (decomposeMentsu(c, found+1)) { c[i]++; c[i+1]++; c[i+2]++; return true; }
+    c[i]++; c[i+1]++; c[i+2]++;
+  }
+  return false;
+}
+
+// Enumerate all decompositions
+function allDecompositions(counts, numOpen) {
+  const results = [];
+  const need = 4 - numOpen;
+  // Seven pairs
+  if (numOpen === 0 && isSevenPairs(counts)) {
+    const pairs = [];
+    for (let i = 0; i < 34; i++) if (counts[i] === 2) pairs.push(i);
+    results.push({ type: 'chitoitsu', pairs, pair: -1, mentsu: [] });
+  }
+  // Regular
+  for (let p = 0; p < 34; p++) {
+    if (counts[p] < 2) continue;
+    counts[p] -= 2;
+    const sets = [];
+    enumMentsu(counts, need, [], sets);
+    counts[p] += 2;
+    for (const ms of sets) results.push({ type: 'regular', pair: p, mentsu: ms });
+  }
+  return results;
+}
+
+function enumMentsu(c, need, cur, results) {
+  if (need === 0) {
+    for (let i = 0; i < 34; i++) if (c[i] !== 0) return;
+    results.push([...cur]);
+    return;
+  }
+  let i = 0; while (i < 34 && c[i] === 0) i++;
+  if (i >= 34) return;
+  if (c[i] >= 3) {
+    c[i]-=3; cur.push({type:'koutsu',tile:i});
+    enumMentsu(c, need-1, cur, results);
+    cur.pop(); c[i]+=3;
+  }
+  if (i < 27 && i%9 <= 6 && c[i+1]>=1 && c[i+2]>=1) {
+    c[i]--; c[i+1]--; c[i+2]--;
+    cur.push({type:'shuntsu',tile:i});
+    enumMentsu(c, need-1, cur, results);
+    cur.pop(); c[i]++; c[i+1]++; c[i+2]++;
+  }
+}
+
+// Tenpai / waiting tiles
+function getWaits(counts) {
+  const w = [];
+  for (let t = 0; t < 34; t++) {
+    if (counts[t] >= 4) continue;
+    counts[t]++;
+    if (canWin(counts)) w.push(t);
+    counts[t]--;
+  }
+  return w;
+}
+
+function isTenpai(counts) { return getWaits(counts).length > 0; }
+
+// ============================================================
+//  YAKU CHECKER
+// ============================================================
+function checkAllYaku(decomp, hand, winType, isTsumo, seatWind, roundWind, isRiichi, ippatsu, allCounts) {
+  const best = { yaku: [], han: 0, fu: 0, decomp: null };
+  const isMenzen = hand.isMenzen();
+  const openMelds = hand.melds.filter(m => m.open);
+  if (!allCounts) allCounts = hand.allTypeIds();
+  const winTileType = uid2type(winType);
+
+  for (const dc of decomp) {
+    const yaku = [];
+    // Riichi
+    if (isRiichi && isMenzen) { yaku.push({name:'リーチ', han:1}); }
+    // Ippatsu
+    if (ippatsu && isRiichi) { yaku.push({name:'一発', han:1}); }
+    // Menzen Tsumo
+    if (isTsumo && isMenzen && dc.type !== 'chitoitsu') { yaku.push({name:'門前清自摸和', han:1}); }
+
+    if (dc.type === 'chitoitsu') {
+      yaku.push({name:'七対子', han:2});
+      if (isTsumo && isMenzen) yaku.push({name:'門前清自摸和', han:1});
+      // Tanyao
+      if (dc.pairs.every(t => !isYaochu(t))) yaku.push({name:'タンヤオ', han:1});
+      // Honitsu / Chinitsu
+      checkFlush(allCounts, yaku, isMenzen);
+    } else {
+      const allMentsu = [...dc.mentsu, ...openMelds.map(m => meldToDecomp(m))];
+      const pairTile = dc.pair;
+      // Tanyao
+      if (checkTanyao(allMentsu, pairTile, openMelds)) yaku.push({name:'タンヤオ', han:1});
+      // Pinfu
+      if (isMenzen && checkPinfu(dc, seatWind, roundWind, winTileType))
+        yaku.push({name:'ピンフ', han:1});
+      // Yakuhai
+      checkYakuhai(allMentsu, seatWind, roundWind, yaku);
+      // Iipeiko
+      if (isMenzen && checkIipeiko(dc.mentsu)) yaku.push({name:'一盃口', han:1});
+      // Toitoi
+      if (allMentsu.every(m => m.type === 'koutsu')) yaku.push({name:'対々和', han:2});
+      // Sanshoku
+      if (checkSanshoku(allMentsu)) yaku.push({name:'三色同順', han: isMenzen?2:1});
+      // Ittsu
+      if (checkIttsu(allMentsu)) yaku.push({name:'一気通貫', han: isMenzen?2:1});
+      // Chanta
+      if (checkChanta(allMentsu, pairTile)) yaku.push({name:'混全帯幺九', han: isMenzen?2:1});
+      // Honitsu / Chinitsu
+      checkFlush(allCounts, yaku, isMenzen);
+    }
+
+    let totalHan = yaku.reduce((s,y) => s+y.han, 0);
+    if (totalHan > 0 && totalHan > best.han) {
+      const fu = calcFu(dc, hand, isTsumo, winTileType, seatWind, roundWind, isMenzen, yaku);
+      best.yaku = yaku; best.han = totalHan; best.fu = fu; best.decomp = dc;
+    }
+  }
+  return best;
+}
+
+function meldToDecomp(m) {
+  const types = m.typeIds();
+  if (m.type === 'pon' || m.type === 'ankan' || m.type === 'minkan')
+    return {type:'koutsu', tile: types[0]};
+  return {type:'shuntsu', tile: Math.min(...types)};
+}
+
+function checkTanyao(mentsu, pair, openMelds) {
+  if (isYaochu(pair)) return false;
+  for (const m of mentsu) {
+    if (m.type === 'koutsu' && isYaochu(m.tile)) return false;
+    if (m.type === 'shuntsu') {
+      if (isYaochu(m.tile) || isYaochu(m.tile+2)) return false;
+    }
+  }
+  return true;
+}
+
+function checkPinfu(dc, seatWind, roundWind, winTile) {
+  if (dc.type !== 'regular') return false;
+  // All mentsu must be shuntsu
+  if (dc.mentsu.some(m => m.type !== 'shuntsu')) return false;
+  // Pair must not be yakuhai
+  const p = dc.pair;
+  if (isDragon(p)) return false;
+  if (p === 27 + seatWind) return false;
+  if (p === 27 + roundWind) return false;
+  // Must have ryanmen wait
+  for (const m of dc.mentsu) {
+    if (m.type === 'shuntsu') {
+      if (winTile === m.tile && (m.tile % 9) !== 6) return true;      // drew lowest, not 7-8-9
+      if (winTile === m.tile + 2 && (m.tile % 9) !== 0) return true;  // drew highest, not 1-2-3
+    }
+  }
+  return false;
+}
+
+function checkYakuhai(mentsu, seatWind, roundWind, yaku) {
+  for (const m of mentsu) {
+    if (m.type !== 'koutsu') continue;
+    if (m.tile === 31) yaku.push({name:'役牌 白', han:1});
+    if (m.tile === 32) yaku.push({name:'役牌 發', han:1});
+    if (m.tile === 33) yaku.push({name:'役牌 中', han:1});
+    if (m.tile === 27 + seatWind) yaku.push({name:'自風 '+WIND_KANJI[seatWind], han:1});
+    if (m.tile === 27 + roundWind && roundWind !== seatWind) yaku.push({name:'場風 '+WIND_KANJI[roundWind], han:1});
+  }
+}
+
+function checkIipeiko(mentsu) {
+  for (let i = 0; i < mentsu.length; i++) {
+    if (mentsu[i].type !== 'shuntsu') continue;
+    for (let j = i+1; j < mentsu.length; j++) {
+      if (mentsu[j].type === 'shuntsu' && mentsu[j].tile === mentsu[i].tile) return true;
+    }
+  }
+  return false;
+}
+
+function checkSanshoku(mentsu) {
+  const shuntsu = mentsu.filter(m => m.type === 'shuntsu');
+  for (const m of shuntsu) {
+    const n = m.tile % 9;
+    const hasMan = shuntsu.some(x => x.tile === n);
+    const hasPin = shuntsu.some(x => x.tile === n + 9);
+    const hasSou = shuntsu.some(x => x.tile === n + 18);
+    if (hasMan && hasPin && hasSou) return true;
+  }
+  return false;
+}
+
+function checkIttsu(mentsu) {
+  const shuntsu = mentsu.filter(m => m.type === 'shuntsu');
+  for (let s = 0; s < 3; s++) {
+    const base = s * 9;
+    if (shuntsu.some(x=>x.tile===base) && shuntsu.some(x=>x.tile===base+3) && shuntsu.some(x=>x.tile===base+6))
+      return true;
+  }
+  return false;
+}
+
+function checkChanta(mentsu, pair) {
+  if (!isYaochu(pair)) return false;
+  let hasJihai = isHonor(pair);
+  for (const m of mentsu) {
+    if (m.type === 'koutsu') {
+      if (!isYaochu(m.tile)) return false;
+      if (isHonor(m.tile)) hasJihai = true;
+    } else {
+      if (m.tile % 9 !== 0 && m.tile % 9 !== 6) return false;
+    }
+  }
+  return hasJihai;
+}
+
+function checkFlush(handCounts, yaku, isMenzen) {
+  const suits = new Set(); let hasHonor = false;
+  for (let t = 0; t < 34; t++) {
+    if (handCounts[t] === 0) continue;
+    if (t >= 27) hasHonor = true;
+    else suits.add(Math.floor(t / 9));
+  }
+  if (suits.size === 1 && !hasHonor) { yaku.push({name:'清一色', han: isMenzen?6:5}); return; }
+  if (suits.size === 1 && hasHonor) { yaku.push({name:'混一色', han: isMenzen?3:2}); }
+}
+
+// ============================================================
+//  FU CALCULATION
+// ============================================================
+function calcFu(dc, hand, isTsumo, winTile, seatWind, roundWind, isMenzen, yakuList) {
+  if (dc.type === 'chitoitsu') return 25;
+  const isPinfu = yakuList.some(y => y.name === 'ピンフ');
+  if (isPinfu && isTsumo) return 20;
+
+  let fu = 20;
+  if (isMenzen && !isTsumo) fu += 10;
+  if (isTsumo && !isPinfu) fu += 2;
+
+  const openMelds = hand.melds.filter(m => m.open);
+  // Closed mentsu
+  for (const m of dc.mentsu) {
+    if (m.type === 'koutsu') {
+      let base = isYaochu(m.tile) ? 8 : 4;
+      // If this koutsu was completed by ron (the winning tile), it's minko
+      const isFromRon = !isTsumo && m.tile === winTile;
+      const isOpen = isFromRon || openMelds.some(om => om.type==='pon' && uid2type(om.tiles[0])===m.tile);
+      if (isOpen) base = base / 2;
+      fu += base;
+    }
+  }
+  // Open melds
+  for (const m of openMelds) {
+    const t = uid2type(m.tiles[0]);
+    if (m.type === 'pon') {
+      // Already counted if matching decomp koutsu, but let's be safe
+      if (!dc.mentsu.some(dm => dm.type==='koutsu' && dm.tile===t)) {
+        fu += isYaochu(t) ? 4 : 2;
+      }
+    }
+  }
+  // Pair
+  const p = dc.pair;
+  if (isDragon(p)) fu += 2;
+  if (p === 27 + seatWind) fu += 2;
+  if (p === 27 + roundWind) fu += 2;
+  // Wait
+  fu += getWaitFu(dc, winTile);
+
+  fu = Math.ceil(fu / 10) * 10;
+  if (fu < 30) fu = 30;
+  return fu;
+}
+
+function getWaitFu(dc, winTile) {
+  // Check if tanki (pair wait)
+  if (dc.pair === winTile) return 2;
+  for (const m of dc.mentsu) {
+    if (m.type === 'shuntsu') {
+      if (winTile === m.tile + 1) return 2; // kanchan (middle wait)
+      // penchan: 1-2-[3] → drew highest of 1-2-3
+      if (winTile === m.tile + 2 && m.tile % 9 === 0) return 2;
+      // penchan: [7]-8-9 → drew lowest of 7-8-9
+      if (winTile === m.tile && m.tile % 9 === 6) return 2;
+    }
+  }
+  return 0;
+}
+
+// ============================================================
+//  SCORE CALCULATOR
+// ============================================================
+function calcScore(han, fu, isDealer, isTsumo, honba, riichiSticks) {
+  let base;
+  if (han >= 13) base = 8000;
+  else if (han >= 11) base = 6000;
+  else if (han >= 8) base = 4000;
+  else if (han >= 6) base = 3000;
+  else if (han >= 5) base = 2000;
+  else {
+    base = fu * Math.pow(2, han + 2);
+    if (base >= 2000) base = 2000;
+  }
+
+  const r100 = v => Math.ceil(v / 100) * 100;
+  let result = { total: 0, payments: [], label: '' };
+
+  if (base >= 8000) result.label = '役満';
+  else if (base >= 6000) result.label = '三倍満';
+  else if (base >= 4000) result.label = '倍満';
+  else if (base >= 3000) result.label = '跳満';
+  else if (base >= 2000) result.label = '満貫';
+  else result.label = `${fu}符${han}翻`;
+
+  const honbaBonus = honba * 300;
+
+  if (isTsumo) {
+    if (isDealer) {
+      const each = r100(base * 2);
+      result.total = each * 3 + honbaBonus + riichiSticks * 1000;
+      result.payments = [{label:'全員', amount: each + honba * 100}];
+    } else {
+      const fromDealer = r100(base * 2);
+      const fromOther = r100(base);
+      result.total = fromDealer + fromOther * 2 + honbaBonus + riichiSticks * 1000;
+      result.payments = [
+        {label:'親', amount: fromDealer + honba * 100},
+        {label:'子', amount: fromOther + honba * 100}
+      ];
+    }
+  } else {
+    if (isDealer) {
+      result.total = r100(base * 6) + honbaBonus + riichiSticks * 1000;
+      result.payments = [{label:'放銃者', amount: r100(base * 6) + honbaBonus}];
+    } else {
+      result.total = r100(base * 4) + honbaBonus + riichiSticks * 1000;
+      result.payments = [{label:'放銃者', amount: r100(base * 4) + honbaBonus}];
+    }
+  }
+  return result;
+}
+
+// ============================================================
+//  CPU AI
+// ============================================================
+function cpuChooseDiscard(player) {
+  const hand = player.hand;
+  const counts = hand.counts();
+  let bestUid = hand.closed[0], bestScore = 999;
+
+  for (const uid of hand.closed) {
+    const t = uid2type(uid);
+    let score = 0;
+    // Pairs and triplets
+    if (counts[t] >= 3) score += 12;
+    else if (counts[t] >= 2) score += 5;
+    // Suited adjacency
+    if (t < 27) {
+      const n = t % 9;
+      if (n > 0 && counts[t-1] > 0) score += 4;
+      if (n < 8 && counts[t+1] > 0) score += 4;
+      if (n > 1 && counts[t-2] > 0) score += 2;
+      if (n < 7 && counts[t+2] > 0) score += 2;
+      // Middle tiles more versatile
+      if (n >= 2 && n <= 6) score += 1;
+    }
+    // Yakuhai bonus
+    if (t >= 31) score += 3;
+    if (score < bestScore) { bestScore = score; bestUid = uid; }
+  }
+  return bestUid;
+}
+
+function cpuShouldPon(player, tileType) {
+  const c = player.hand.counts();
+  if (c[tileType] < 2) return false;
+  // Always pon yakuhai
+  if (tileType >= 31) return true;
+  if (isWind(tileType) && (tileType - 27 === player.seatWind)) return true;
+  // Pon if hand is already fairly open or has good groups
+  let groups = player.hand.melds.length;
+  for (let i = 0; i < 34; i++) if (c[i] >= 3) groups++;
+  return groups >= 1 && Math.random() < 0.5;
+}
+
+function cpuShouldChi(player, tileType, options) {
+  if (player.isRiichi) return false;
+  let groups = player.hand.melds.length;
+  const c = player.hand.counts();
+  for (let i = 0; i < 34; i++) if (c[i] >= 3) groups++;
+  return groups >= 2 && Math.random() < 0.3;
+}
+
+// ============================================================
+//  GAME
+// ============================================================
+class Game {
+  constructor() {
+    this.players = [new Player(0,true), new Player(1,false), new Player(2,false), new Player(3,false)];
+    this.roundWind = 0;
+    this.dealerSeat = 0;
+    this.roundNum = 0;
+    this.honba = 0;
+    this.riichiSticks = 0;
+    this.wall = null;
+    this.currentSeat = 0;
+    this.phase = 'idle';
+    this.actionResolve = null;
+    this.discardResolve = null;
+    this.chiResolve = null;
+    this.running = false;
+    this.lastDiscardUid = -1;
+    this.lastDiscarderSeat = -1;
+  }
+
+  // --- Async helpers ---
+  waitForAction() { return new Promise(r => { this.actionResolve = r; }); }
+  resolveAction(a) { if (this.actionResolve) { const r=this.actionResolve; this.actionResolve=null; r(a); } }
+  waitForDiscard() { return new Promise(r => { this.discardResolve = r; }); }
+  resolveDiscard(uid) { if (this.discardResolve) { const r=this.discardResolve; this.discardResolve=null; r(uid); } }
+  waitForChi() { return new Promise(r => { this.chiResolve = r; }); }
+  resolveChi(opt) { if (this.chiResolve) { const r=this.chiResolve; this.chiResolve=null; r(opt); } }
+  delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  // --- Round setup ---
+  initRound() {
+    this.wall = new Wall();
+    this.lastDiscardUid = -1;
+    this.lastDiscarderSeat = -1;
+    for (let i = 0; i < 4; i++) {
+      this.players[i].reset();
+      this.players[i].seatWind = (i - this.dealerSeat + 4) % 4;
+    }
+    // Deal 13 tiles each
+    for (let r = 0; r < 3; r++) {
+      for (let s = 0; s < 4; s++) {
+        for (let t = 0; t < 4; t++) this.players[s].hand.add(this.wall.draw());
+      }
+    }
+    for (let s = 0; s < 4; s++) this.players[s].hand.add(this.wall.draw());
+  }
+
+  // --- Win check helpers ---
+  canTsumo(seat) {
+    const p = this.players[seat];
+    const c = p.hand.counts();
+    if (!canWin(c)) return false;
+    // Check has yaku
+    const dcs = allDecompositions(p.hand.counts(), p.hand.melds.length);
+    const wt = p.lastDraw >= 0 ? p.lastDraw : p.hand.closed[p.hand.closed.length-1];
+    const allC = p.hand.allTypeIds();
+    const res = checkAllYaku(dcs, p.hand, wt, true, p.seatWind, this.roundWind, p.isRiichi, p.ippatsu, allC);
+    return res.han > 0;
+  }
+
+  canRon(seat, discardedUid) {
+    const p = this.players[seat];
+    const dt = uid2type(discardedUid);
+    // Furiten check: if any waiting tile is in own discards
+    const c = p.hand.counts();
+    const waits = getWaits(c);
+    if (!waits.includes(dt)) return false;
+    const discardTypes = p.hand.discards.map(uid2type);
+    for (const w of waits) { if (discardTypes.includes(w)) return false; }
+    // Check has yaku (temporarily add tile to counts)
+    c[dt]++;
+    const dcs = allDecompositions(c, p.hand.melds.length);
+    const allC = p.hand.allTypeIds();
+    allC[dt]++;
+    const res = checkAllYaku(dcs, p.hand, discardedUid, false, p.seatWind, this.roundWind, p.isRiichi, p.ippatsu, allC);
+    c[dt]--;
+    return res.han > 0;
+  }
+
+  canPon(seat, discardedType) {
+    if (this.players[seat].isRiichi) return false;
+    const c = this.players[seat].hand.counts();
+    return c[discardedType] >= 2;
+  }
+
+  getChiOptions(seat, discardedUid) {
+    const p = this.players[seat];
+    if (p.isRiichi) return [];
+    const dt = uid2type(discardedUid);
+    if (dt >= 27) return [];
+    const c = p.hand.counts();
+    const n = dt % 9;
+    const s = Math.floor(dt / 9) * 9;
+    const opts = [];
+    // dt is lowest: need dt+1, dt+2
+    if (n <= 6 && c[dt+1] >= 1 && c[dt+2] >= 1) opts.push([dt, dt+1, dt+2]);
+    // dt is middle: need dt-1, dt+1
+    if (n >= 1 && n <= 7 && c[dt-1] >= 1 && c[dt+1] >= 1) opts.push([dt-1, dt, dt+1]);
+    // dt is highest: need dt-2, dt-1
+    if (n >= 2 && c[dt-1] >= 1 && c[dt-2] >= 1) opts.push([dt-2, dt-1, dt]);
+    return opts;
+  }
+
+  canDeclareRiichi(seat) {
+    const p = this.players[seat];
+    if (p.isRiichi || !p.hand.isMenzen() || p.score < 1000) return false;
+    if (this.wall.remaining() < 4) return false;
+    // Check if any discard leaves tenpai
+    const c = p.hand.counts();
+    for (const uid of p.hand.closed) {
+      const t = uid2type(uid);
+      c[t]--;
+      if (isTenpai(c)) { c[t]++; return true; }
+      c[t]++;
+    }
+    return false;
+  }
+
+  getRiichiDiscards(seat) {
+    const p = this.players[seat];
+    const c = p.hand.counts();
+    const valid = [];
+    for (const uid of p.hand.closed) {
+      const t = uid2type(uid);
+      c[t]--;
+      if (isTenpai(c)) valid.push(uid);
+      c[t]++;
+    }
+    return [...new Set(valid)];
+  }
+
+  // --- Execute calls ---
+  executePon(seat, fromSeat, discardedUid) {
+    const p = this.players[seat];
+    const dt = uid2type(discardedUid);
+    const used = [];
+    for (const uid of [...p.hand.closed]) {
+      if (uid2type(uid) === dt && used.length < 2) {
+        used.push(uid);
+        p.hand.remove(uid);
+      }
+    }
+    // Remove from discarder's discards (last one)
+    const discarder = this.players[fromSeat];
+    const dIdx = discarder.hand.discards.lastIndexOf(discardedUid);
+    if (dIdx >= 0) discarder.hand.discards.splice(dIdx, 1);
+    p.hand.melds.push(new Meld('pon', [discardedUid, ...used], true, fromSeat));
+  }
+
+  executeChi(seat, fromSeat, discardedUid, option) {
+    const p = this.players[seat];
+    const dt = uid2type(discardedUid);
+    const used = [discardedUid];
+    for (const needType of option) {
+      if (needType === dt) continue;
+      for (const uid of p.hand.closed) {
+        if (uid2type(uid) === needType && !used.includes(uid)) {
+          used.push(uid);
+          p.hand.remove(uid);
+          break;
+        }
+      }
+    }
+    const discarder = this.players[fromSeat];
+    const dIdx = discarder.hand.discards.lastIndexOf(discardedUid);
+    if (dIdx >= 0) discarder.hand.discards.splice(dIdx, 1);
+    used.sort((a,b) => uid2type(a) - uid2type(b));
+    p.hand.melds.push(new Meld('chi', used, true, fromSeat));
+  }
+
+  // --- Win handling ---
+  async handleWin(winnerSeat, loserSeat, winTileUid, isTsumo) {
+    const winner = this.players[winnerSeat];
+    const wt = uid2type(winTileUid);
+
+    // For ron, add tile to winner's hand and clean up discarder
+    if (!isTsumo) {
+      winner.hand.add(winTileUid);
+      if (loserSeat >= 0) {
+        const discarder = this.players[loserSeat];
+        const dIdx = discarder.hand.discards.lastIndexOf(winTileUid);
+        if (dIdx >= 0) discarder.hand.discards.splice(dIdx, 1);
+      }
+    }
+
+    const c = winner.hand.counts();
+    const dcs = allDecompositions(c, winner.hand.melds.length);
+    const allC = winner.hand.allTypeIds();
+    const yakuResult = checkAllYaku(dcs, winner.hand, winTileUid, isTsumo,
+      winner.seatWind, this.roundWind, winner.isRiichi, winner.ippatsu, allC);
+
+    // Dora
+    const doraTypes = this.wall.getDoraTypes();
+    let doraCnt = 0;
+    for (const d of doraTypes) doraCnt += allC[d];
+    if (doraCnt > 0) yakuResult.yaku.push({name:'ドラ '+doraCnt, han: doraCnt});
+    yakuResult.han += doraCnt;
+
+    const isDealer = winner.seatWind === 0;
+    const score = calcScore(yakuResult.han, yakuResult.fu, isDealer, isTsumo, this.honba, this.riichiSticks);
+
+    // Apply score
+    if (isTsumo) {
+      winner.score += score.total;
+      for (let i = 0; i < 4; i++) {
+        if (i === winnerSeat) continue;
+        const isD = this.players[i].seatWind === 0;
+        if (isDealer) {
+          this.players[i].score -= score.payments[0].amount;
+        } else {
+          this.players[i].score -= isD ? score.payments[0].amount : score.payments[1].amount;
+        }
+      }
+    } else {
+      winner.score += score.total;
+      this.players[loserSeat].score -= score.payments[0].amount;
+    }
+    this.riichiSticks = 0;
+
+    // Show result
+    await this.showWinModal(winner, winTileUid, isTsumo, yakuResult, score, loserSeat);
+
+    // Advance round
+    if (winner.seatWind === 0) {
+      this.honba++;
+    } else {
+      this.honba = 0;
+      this.dealerSeat = (this.dealerSeat + 1) % 4;
+      this.roundNum++;
+    }
+  }
+
+  async handleDraw() {
+    // Tenpai payments
+    const tenpaiSeats = [];
+    for (let i = 0; i < 4; i++) {
+      if (isTenpai(this.players[i].hand.counts())) tenpaiSeats.push(i);
+    }
+    if (tenpaiSeats.length > 0 && tenpaiSeats.length < 4) {
+      const pay = [0, 3000, 1500, 1000][tenpaiSeats.length];
+      const recv = [0, 1000, 1500, 3000][tenpaiSeats.length];
+      for (let i = 0; i < 4; i++) {
+        if (tenpaiSeats.includes(i)) this.players[i].score += recv;
+        else this.players[i].score -= pay;
+      }
+    }
+    await this.showDrawModal(tenpaiSeats);
+    // Dealer tenpai → repeat, otherwise rotate
+    if (tenpaiSeats.includes(this.dealerSeat)) {
+      this.honba++;
+    } else {
+      this.honba++;
+      this.dealerSeat = (this.dealerSeat + 1) % 4;
+      this.roundNum++;
+    }
+  }
+
+  // Restore the game board DOM structure (destroyed by start screen)
+  restoreBoard() {
+    const board = document.getElementById('game-board');
+    board.innerHTML = `
+      <div id="cpu2-area" class="cpu-area"></div>
+      <div class="cpu-row">
+        <div id="cpu3-area" class="cpu-area"></div>
+        <div id="cpu1-area" class="cpu-area"></div>
+      </div>
+      <div id="player-discard-area">
+        <div class="section-label">あなたの捨牌</div>
+        <div class="discard-row" id="player-discards"></div>
+      </div>
+      <div id="player-area">
+        <div id="player-info"></div>
+        <div id="player-hand-row">
+          <div id="player-hand"></div>
+          <div id="player-draw"></div>
+          <div id="player-melds"></div>
+        </div>
+      </div>`;
+  }
+
+  // --- Main game loop ---
+  async run() {
+    this.running = true;
+    this.restoreBoard();
+    while (this.roundNum < 4 && this.running) {
+      await this.playRound();
+      if (!this.running) break;
+      // Check if anyone is bankrupt
+      if (this.players.some(p => p.score < 0)) break;
+    }
+    this.showGameOver();
+  }
+
+  async playRound() {
+    this.initRound();
+    this.render();
+    await this.delay(300);
+
+    let currentSeat = this.dealerSeat;
+    let needDraw = true;
+
+    while (this.running) {
+      const player = this.players[currentSeat];
+
+      // === DRAW ===
+      if (needDraw) {
+        if (this.wall.remaining() <= 0) {
+          await this.handleDraw();
+          return;
+        }
+        const uid = this.wall.draw();
+        player.hand.add(uid);
+        player.lastDraw = uid;
+        // Reset ippatsu for all after a full turn
+        for (const p of this.players) {
+          if (p !== player && p.ippatsu) p.ippatsu = false;
+        }
+        if (!player.isHuman) this.showMsg(`${SEAT_NAMES[currentSeat]}のターン...`);
+        this.render();
+        await this.delay(player.isHuman ? 100 : 300);
+
+        // Check tsumo
+        if (this.canTsumo(currentSeat)) {
+          if (player.isHuman) {
+            this.showActionButtons(['tsumo', 'skip']);
+            const act = await this.waitForAction();
+            this.hideActionButtons();
+            if (act === 'tsumo') {
+              await this.handleWin(currentSeat, -1, uid, true);
+              return;
+            }
+          } else {
+            await this.delay(300);
+            await this.handleWin(currentSeat, -1, uid, true);
+            return;
+          }
+        }
+      }
+      needDraw = true;
+
+      // === RIICHI CHECK + DISCARD ===
+      let discardUid;
+      if (player.isRiichi) {
+        // Must tsumogiri
+        discardUid = player.lastDraw;
+        if (!player.isHuman) await this.delay(300);
+      } else if (player.isHuman) {
+        const canRiichi = this.canDeclareRiichi(currentSeat);
+        this.phase = 'discard';
+        if (canRiichi) {
+          // Show riichi button; player can also click tiles to discard directly
+          this.showActionButtons(['riichi', 'skip_riichi']);
+          this.showMsg('捨てる牌をクリック、またはリーチ宣言');
+          this.render();
+          const result = await new Promise(resolve => {
+            const done = (val) => { this.discardResolve=null; this.actionResolve=null; resolve(val); };
+            this.discardResolve = (uid) => done({type:'discard', uid});
+            this.actionResolve = (act) => done({type:'action', act});
+          });
+          this.hideActionButtons();
+          if (result.type === 'action' && result.act === 'riichi') {
+            // Riichi declared - must choose valid discard
+            player.isRiichi = true;
+            player.ippatsu = true;
+            player.score -= 1000;
+            this.riichiSticks++;
+            this.phase = 'riichi_discard';
+            this.render();
+            this.showMsg('リーチ宣言！ 切る牌を選んでください');
+            discardUid = await this.waitForDiscard();
+            // Validate
+            const validDiscards = this.getRiichiDiscards(currentSeat);
+            if (!validDiscards.some(u => uid2type(u) === uid2type(discardUid))) {
+              discardUid = validDiscards[0];
+            }
+            player.riichiTurn = player.hand.discards.length; // index of riichi discard
+          } else if (result.type === 'discard') {
+            discardUid = result.uid;
+          } else {
+            // skip_riichi - wait for discard
+            this.phase = 'discard';
+            this.showMsg('捨てる牌をクリックしてください');
+            this.render();
+            discardUid = await this.waitForDiscard();
+          }
+        } else {
+          this.showMsg('捨てる牌をクリックしてください');
+          this.render();
+          discardUid = await this.waitForDiscard();
+        }
+        this.phase = 'idle';
+      } else {
+        // CPU
+        await this.delay(200 + Math.random() * 200);
+        // CPU riichi
+        if (!player.isRiichi && player.hand.isMenzen() && this.canDeclareRiichi(currentSeat)) {
+          if (Math.random() < 0.6) {
+            player.isRiichi = true;
+            player.ippatsu = true;
+            player.score -= 1000;
+            this.riichiSticks++;
+            player.riichiTurn = player.hand.discards.length; // index of riichi discard
+            const valid = this.getRiichiDiscards(currentSeat);
+            discardUid = valid[0];
+          } else {
+            discardUid = cpuChooseDiscard(player);
+          }
+        } else {
+          discardUid = cpuChooseDiscard(player);
+        }
+      }
+
+      // Execute discard
+      player.hand.remove(discardUid);
+      player.hand.discards.push(discardUid);
+      player.lastDraw = -1;
+      this.lastDiscardUid = discardUid;
+      this.lastDiscarderSeat = currentSeat;
+      this.render();
+      await this.delay(200);
+
+      // === CHECK CALLS ===
+      const dt = uid2type(discardUid);
+      let callMade = false;
+
+      // 1. Ron
+      for (let i = 1; i <= 3; i++) {
+        const seat = (currentSeat + i) % 4;
+        if (this.canRon(seat, discardUid)) {
+          let doRon = false;
+          if (this.players[seat].isHuman) {
+            this.showActionButtons(['ron', 'skip']);
+            this.showMsg('ロンできます！');
+            const act = await this.waitForAction();
+            this.hideActionButtons();
+            doRon = (act === 'ron');
+          } else {
+            await this.delay(400);
+            doRon = true;
+          }
+          if (doRon) {
+            await this.handleWin(seat, currentSeat, discardUid, false);
+            return;
+          }
+        }
+      }
+
+      // 2. Pon
+      if (!callMade) {
+        for (let i = 1; i <= 3; i++) {
+          const seat = (currentSeat + i) % 4;
+          if (this.canPon(seat, dt)) {
+            let doPon = false;
+            if (this.players[seat].isHuman) {
+              this.showActionButtons(['pon', 'skip']);
+              this.showMsg('ポンできます！');
+              const act = await this.waitForAction();
+              this.hideActionButtons();
+              doPon = (act === 'pon');
+            } else {
+              doPon = cpuShouldPon(this.players[seat], dt);
+              if (doPon) await this.delay(400);
+            }
+            if (doPon) {
+              this.executePon(seat, currentSeat, discardUid);
+              this.render();
+              // Discard after pon
+              let afterUid;
+              if (this.players[seat].isHuman) {
+                this.phase = 'discard';
+                this.showMsg('捨てる牌をクリックしてください');
+                this.render();
+                afterUid = await this.waitForDiscard();
+                this.phase = 'idle';
+              } else {
+                await this.delay(300);
+                afterUid = cpuChooseDiscard(this.players[seat]);
+              }
+              this.players[seat].hand.remove(afterUid);
+              this.players[seat].hand.discards.push(afterUid);
+              this.lastDiscardUid = afterUid;
+              this.lastDiscarderSeat = seat;
+              this.render();
+              await this.delay(200);
+
+              // Check calls on the pon-discard
+              // Ron check
+              let ronAfterPon = false;
+              for (let j = 1; j <= 3; j++) {
+                const rs = (seat + j) % 4;
+                if (this.canRon(rs, afterUid)) {
+                  let doR = false;
+                  if (this.players[rs].isHuman) {
+                    this.showActionButtons(['ron', 'skip']);
+                    const a2 = await this.waitForAction();
+                    this.hideActionButtons();
+                    doR = (a2 === 'ron');
+                  } else { doR = true; await this.delay(300); }
+                  if (doR) {
+                    await this.handleWin(rs, seat, afterUid, false);
+                    return;
+                  }
+                }
+              }
+
+              currentSeat = (seat + 1) % 4;
+              callMade = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // 3. Chi (next player only)
+      if (!callMade) {
+        const chiSeat = (currentSeat + 1) % 4;
+        const chiOpts = this.getChiOptions(chiSeat, discardUid);
+        if (chiOpts.length > 0) {
+          let doChi = false;
+          let chosenOpt = null;
+          if (this.players[chiSeat].isHuman) {
+            this.showActionButtons(['chi', 'skip']);
+            this.showMsg('チーできます！');
+            const act = await this.waitForAction();
+            this.hideActionButtons();
+            if (act === 'chi') {
+              doChi = true;
+              if (chiOpts.length > 1) {
+                chosenOpt = await this.showChiSelection(chiOpts);
+              } else {
+                chosenOpt = chiOpts[0];
+              }
+            }
+          } else {
+            doChi = cpuShouldChi(this.players[chiSeat], dt, chiOpts);
+            if (doChi) { chosenOpt = chiOpts[0]; await this.delay(400); }
+          }
+          if (doChi && chosenOpt) {
+            this.executeChi(chiSeat, currentSeat, discardUid, chosenOpt);
+            this.render();
+            // Discard after chi
+            let afterUid;
+            if (this.players[chiSeat].isHuman) {
+              this.phase = 'discard';
+              this.showMsg('捨てる牌をクリックしてください');
+              this.render();
+              afterUid = await this.waitForDiscard();
+              this.phase = 'idle';
+            } else {
+              await this.delay(300);
+              afterUid = cpuChooseDiscard(this.players[chiSeat]);
+            }
+            this.players[chiSeat].hand.remove(afterUid);
+            this.players[chiSeat].hand.discards.push(afterUid);
+            this.lastDiscardUid = afterUid;
+            this.lastDiscarderSeat = chiSeat;
+            this.render();
+            await this.delay(200);
+
+            // Ron check on chi-discard
+            for (let j = 1; j <= 3; j++) {
+              const rs = (chiSeat + j) % 4;
+              if (this.canRon(rs, afterUid)) {
+                let doR = false;
+                if (this.players[rs].isHuman) {
+                  this.showActionButtons(['ron', 'skip']);
+                  const a2 = await this.waitForAction();
+                  this.hideActionButtons();
+                  doR = (a2 === 'ron');
+                } else { doR = true; await this.delay(300); }
+                if (doR) {
+                  await this.handleWin(rs, chiSeat, afterUid, false);
+                  return;
+                }
+              }
+            }
+
+            currentSeat = (chiSeat + 1) % 4;
+            callMade = true;
+          }
+        }
+      }
+
+      if (!callMade) {
+        currentSeat = (currentSeat + 1) % 4;
+      }
+      this.lastDiscardUid = -1;
+    }
+  }
+
+  // ============================================================
+  //  UI RENDERING
+  // ============================================================
+  render() {
+    this.renderInfoBar();
+    this.renderCPU(1, 'cpu1-area');
+    this.renderCPU(2, 'cpu2-area');
+    this.renderCPU(3, 'cpu3-area');
+    this.renderPlayerDiscards();
+    this.renderPlayerHand();
+    this.renderPlayerInfo();
+  }
+
+  renderInfoBar() {
+    document.getElementById('ib-round').textContent = WIND_KANJI[this.roundWind];
+    document.getElementById('ib-kyoku').textContent = WIND_KANJI[this.roundWind] + (this.roundNum % 4 + 1) + '局';
+    document.getElementById('ib-honba').textContent = this.honba;
+    document.getElementById('ib-remain').textContent = this.wall ? this.wall.remaining() : '-';
+    document.getElementById('ib-riichi-sticks').textContent = this.riichiSticks * 1000;
+
+    const doraEl = document.getElementById('ib-dora');
+    doraEl.innerHTML = '';
+    if (this.wall) {
+      for (const uid of this.wall.getDoraIndicators()) {
+        doraEl.appendChild(createTileEl(uid2type(uid), {sm: true}));
+      }
+    }
+  }
+
+  renderCPU(seat, elId) {
+    const p = this.players[seat];
+    const el = document.getElementById(elId);
+    el.innerHTML = '';
+
+    // Label
+    const label = document.createElement('div');
+    label.className = 'player-label';
+    const windBadge = `<span class="wind-badge">${WIND_KANJI[p.seatWind]}</span>`;
+    const rMark = p.isRiichi ? '<span class="riichi-mark">リーチ</span>' : '';
+    label.innerHTML = `${SEAT_NAMES[seat]} ${windBadge}${rMark} <span class="score">${p.score}点</span>`;
+    el.appendChild(label);
+
+    // Hand (facedown) + melds
+    const handRow = document.createElement('div');
+    handRow.style.display = 'flex';
+    handRow.style.alignItems = 'flex-end';
+    handRow.style.flexWrap = 'wrap';
+    const handDiv = document.createElement('div');
+    handDiv.className = 'cpu-hand';
+    for (let i = 0; i < p.hand.closed.length; i++) {
+      handDiv.appendChild(createTileEl(0, {facedown:true, sm:true}));
+    }
+    handRow.appendChild(handDiv);
+
+    // Melds (face up)
+    for (const m of p.hand.melds) {
+      const mg = document.createElement('div');
+      mg.className = 'meld-group';
+      for (const uid of m.tiles) {
+        mg.appendChild(createTileEl(uid2type(uid), {sm:true}));
+      }
+      handRow.appendChild(mg);
+    }
+    el.appendChild(handRow);
+
+    // Discards
+    const discDiv = document.createElement('div');
+    discDiv.className = 'cpu-discards';
+    for (let i = 0; i < p.hand.discards.length; i++) {
+      const uid = p.hand.discards[i];
+      const isLast = (uid === this.lastDiscardUid && seat === this.lastDiscarderSeat);
+      const isRiichiTile = (p.isRiichi && p.riichiTurn >= 0 && i === p.riichiTurn);
+      const t = createTileEl(uid2type(uid), {sm:true, lastDiscard: isLast, sideways: isRiichiTile});
+      discDiv.appendChild(t);
+    }
+    el.appendChild(discDiv);
+  }
+
+  renderPlayerDiscards() {
+    const p = this.players[0];
+    const el = document.getElementById('player-discards');
+    el.innerHTML = '';
+    for (let i = 0; i < p.hand.discards.length; i++) {
+      const uid = p.hand.discards[i];
+      const isLast = (uid === this.lastDiscardUid && this.lastDiscarderSeat === 0);
+      const isRiichiTile = (p.isRiichi && p.riichiTurn >= 0 && i === p.riichiTurn);
+      el.appendChild(createTileEl(uid2type(uid), {discard:true, lastDiscard: isLast, sideways: isRiichiTile}));
+    }
+  }
+
+  renderPlayerHand() {
+    const p = this.players[0];
+    const handEl = document.getElementById('player-hand');
+    const drawEl = document.getElementById('player-draw');
+    const meldsEl = document.getElementById('player-melds');
+    handEl.innerHTML = '';
+    drawEl.innerHTML = '';
+    meldsEl.innerHTML = '';
+
+    const isDiscardPhase = this.phase === 'discard' || this.phase === 'riichi_discard';
+
+    for (const uid of p.hand.closed) {
+      const isDrawn = (uid === p.lastDraw);
+      const target = isDrawn ? drawEl : handEl;
+      const tile = createTileEl(uid2type(uid), {clickable: isDiscardPhase});
+      if (isDiscardPhase) {
+        tile.addEventListener('click', () => {
+          if (this.phase === 'riichi_discard') {
+            const valid = this.getRiichiDiscards(0);
+            if (!valid.some(v => uid2type(v) === uid2type(uid))) return;
+          }
+          this.resolveDiscard(uid);
+        });
+      }
+      target.appendChild(tile);
+    }
+
+    // Melds
+    for (const m of p.hand.melds) {
+      const mg = document.createElement('div');
+      mg.className = 'meld-group';
+      for (const uid of m.tiles) {
+        mg.appendChild(createTileEl(uid2type(uid), {meld:true}));
+      }
+      meldsEl.appendChild(mg);
+    }
+  }
+
+  renderPlayerInfo() {
+    const p = this.players[0];
+    const el = document.getElementById('player-info');
+    const rMark = p.isRiichi ? '<span class="riichi-mark">リーチ</span>' : '';
+    el.innerHTML = `あなた <span class="wind-badge" style="background:#e6c200;color:#1a1a2e;padding:1px 6px;border-radius:3px;font-weight:bold;font-size:11px;">${WIND_KANJI[p.seatWind]}</span>${rMark} <span style="color:#ffd700;font-weight:bold;">${p.score}点</span>`;
+  }
+
+  // --- Action buttons ---
+  showActionButtons(actions) {
+    const bar = document.getElementById('action-bar');
+    bar.innerHTML = '';
+    const btnMap = {
+      tsumo: {label:'ツモ', cls:'btn-tsumo'},
+      ron: {label:'ロン', cls:'btn-ron'},
+      riichi: {label:'リーチ', cls:'btn-riichi'},
+      pon: {label:'ポン', cls:'btn-pon'},
+      chi: {label:'チー', cls:'btn-chi'},
+      skip: {label:'スキップ', cls:'btn-skip'},
+      skip_riichi: {label:'スキップ', cls:'btn-skip'},
+    };
+    for (const a of actions) {
+      const b = document.createElement('button');
+      b.className = 'action-btn ' + (btnMap[a]?.cls || 'btn-skip');
+      b.textContent = btnMap[a]?.label || a;
+      b.addEventListener('click', () => this.resolveAction(a));
+      bar.appendChild(b);
+    }
+  }
+
+  hideActionButtons() {
+    document.getElementById('action-bar').innerHTML = '<span id="action-msg"></span>';
+  }
+
+  showMsg(msg) {
+    const el = document.getElementById('action-msg');
+    if (el) el.textContent = msg;
+  }
+
+  // --- Chi selection modal ---
+  showChiSelection(options) {
+    return new Promise(resolve => {
+      const modal = document.getElementById('modal-overlay');
+      const box = document.getElementById('modal-box');
+      box.innerHTML = '<h2>チーの組み合わせを選択</h2>';
+      const optDiv = document.createElement('div');
+      optDiv.className = 'chi-options';
+      for (const opt of options) {
+        const od = document.createElement('div');
+        od.className = 'chi-option';
+        for (const t of opt) od.appendChild(createTileEl(t, {meld:true}));
+        od.addEventListener('click', () => { modal.classList.remove('show'); resolve(opt); });
+        optDiv.appendChild(od);
+      }
+      box.appendChild(optDiv);
+      modal.classList.add('show');
+    });
+  }
+
+  // --- Win modal ---
+  async showWinModal(winner, winTileUid, isTsumo, yakuResult, score, loserSeat) {
+    const modal = document.getElementById('modal-overlay');
+    const box = document.getElementById('modal-box');
+    const winType = isTsumo ? 'ツモ' : 'ロン';
+    let html = `<h2>${SEAT_NAMES[winner.seat]}の${winType}！</h2>`;
+
+    // Show hand
+    html += '<div class="hand-display">';
+    for (const uid of winner.hand.closed) {
+      const t = uid2type(uid);
+      html += createTileEl(t).outerHTML;
+    }
+    for (const m of winner.hand.melds) {
+      html += '<span style="margin-left:8px"></span>';
+      for (const uid of m.tiles) html += createTileEl(uid2type(uid), {meld:true}).outerHTML;
+    }
+    html += '</div>';
+
+    // Yaku list
+    html += '<div class="yaku-list">';
+    for (const y of yakuResult.yaku) {
+      html += `<div class="yaku-item"><span class="yaku-name">${y.name}</span><span class="yaku-han">${y.han}翻</span></div>`;
+    }
+    html += '</div>';
+
+    // Score
+    html += `<div class="score-detail">${score.label}</div>`;
+    html += `<div class="score-total">${score.total}点</div>`;
+    for (const p of score.payments) {
+      html += `<div class="score-detail">${p.label}: ${p.amount}点</div>`;
+    }
+
+    html += '<button class="modal-btn" id="modal-ok">次へ</button>';
+    box.innerHTML = html;
+    modal.classList.add('show');
+
+    await new Promise(r => document.getElementById('modal-ok').addEventListener('click', () => {
+      modal.classList.remove('show');
+      r();
+    }));
+  }
+
+  // --- Draw modal ---
+  async showDrawModal(tenpaiSeats) {
+    const modal = document.getElementById('modal-overlay');
+    const box = document.getElementById('modal-box');
+    let html = '<h2>流局</h2>';
+    if (tenpaiSeats.length === 0) {
+      html += '<p>全員ノーテン</p>';
+    } else {
+      html += '<p>テンパイ: ' + tenpaiSeats.map(s => SEAT_NAMES[s]).join(', ') + '</p>';
+    }
+    html += '<button class="modal-btn" id="modal-ok">次へ</button>';
+    box.innerHTML = html;
+    modal.classList.add('show');
+    await new Promise(r => document.getElementById('modal-ok').addEventListener('click', () => {
+      modal.classList.remove('show');
+      r();
+    }));
+  }
+
+  // --- Game over ---
+  showGameOver() {
+    const modal = document.getElementById('modal-overlay');
+    const box = document.getElementById('modal-box');
+    const sorted = [...this.players].sort((a,b) => b.score - a.score);
+    let html = '<h2>ゲーム終了</h2><div class="final-scores">';
+    for (let i = 0; i < sorted.length; i++) {
+      const cls = i === 0 ? 'final-row winner' : 'final-row';
+      html += `<div class="${cls}"><span>${i+1}位 ${SEAT_NAMES[sorted[i].seat]}</span><span>${sorted[i].score}点</span></div>`;
+    }
+    html += '</div>';
+    html += '<button class="modal-btn" id="modal-restart">もう一度</button>';
+    box.innerHTML = html;
+    modal.classList.add('show');
+    document.getElementById('modal-restart').addEventListener('click', () => {
+      modal.classList.remove('show');
+      startGame();
+    });
+  }
+
+  // --- Start screen ---
+  showStartScreen() {
+    const board = document.getElementById('game-board');
+    board.innerHTML = `
+      <div id="start-screen">
+        <h1>麻 雀</h1>
+        <p>簡易版 - 1人 vs 3CPU</p>
+        <button class="start-btn" id="btn-start">ゲーム開始</button>
+        <div style="margin-top:16px;">
+          <button class="start-btn" id="btn-calc" style="background:#4488ff;color:#fff;font-size:16px;padding:12px 36px;">点数計算</button>
+        </div>
+      </div>`;
+    document.getElementById('btn-start').addEventListener('click', () => startGame());
+    document.getElementById('btn-calc').addEventListener('click', () => showCalcScreen());
+  }
+}
+
+// ============================================================
+//  CALCULATOR
+// ============================================================
+class Calculator {
+  constructor() {
+    this.tiles = [];       // array of typeId (closed hand tiles)
+    this.melds = [];       // array of {type:'pon'|'chi', tiles:[typeId,...]}
+    this.winTileType = -1; // which tile in hand is the winning tile
+    this.options = {
+      winMethod: 'tsumo',  // 'tsumo' | 'ron'
+      isDealer: false,
+      roundWind: 0,
+      seatWind: 0,
+      riichi: false,
+    };
+    this.meldMode = null;  // null | 'pon' | 'chi'
+    this.init();
+  }
+
+  init() {
+    // Back button
+    document.getElementById('calc-back').addEventListener('click', () => showStart());
+    // Clear button
+    document.getElementById('calc-clear').addEventListener('click', () => this.clear());
+    // Calculate button
+    document.getElementById('calc-calculate').addEventListener('click', () => this.calculate());
+    // Meld buttons
+    document.getElementById('calc-add-pon').addEventListener('click', () => this.toggleMeldMode('pon'));
+    document.getElementById('calc-add-chi').addEventListener('click', () => this.toggleMeldMode('chi'));
+    // Option buttons
+    document.querySelectorAll('#calc-screen .calc-opt-group').forEach(group => {
+      const optName = group.dataset.opt;
+      group.querySelectorAll('.calc-opt-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          group.querySelectorAll('.calc-opt-btn').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          let val = btn.dataset.val;
+          if (val === 'true') val = true;
+          else if (val === 'false') val = false;
+          else if (!isNaN(Number(val))) val = Number(val);
+          this.options[optName] = val;
+        });
+      });
+    });
+    this.buildPicker();
+    this.render();
+  }
+
+  clear() {
+    this.tiles = [];
+    this.melds = [];
+    this.winTileType = -1;
+    this.meldMode = null;
+    document.getElementById('calc-add-pon').classList.remove('active');
+    document.getElementById('calc-add-chi').classList.remove('active');
+    document.getElementById('calc-result').classList.remove('show');
+    this.render();
+  }
+
+  getUsedCounts() {
+    const c = new Int32Array(34);
+    for (const t of this.tiles) c[t]++;
+    for (const m of this.melds) for (const t of m.tiles) c[t]++;
+    return c;
+  }
+
+  getTotalTileCount() {
+    return this.tiles.length + this.melds.reduce((s, m) => s + m.tiles.length, 0);
+  }
+
+  getMaxClosedTiles() {
+    return 14 - this.melds.reduce((s, m) => s + m.tiles.length, 0);
+  }
+
+  addTile(typeId) {
+    if (this.meldMode === 'pon') {
+      this.addPon(typeId);
+      return;
+    }
+    if (this.meldMode === 'chi') {
+      this.addChi(typeId);
+      return;
+    }
+    const used = this.getUsedCounts();
+    if (used[typeId] >= 4) return;
+    if (this.tiles.length >= this.getMaxClosedTiles()) return;
+    this.tiles.push(typeId);
+    this.tiles.sort((a, b) => a - b);
+    this.render();
+  }
+
+  removeTile(idx) {
+    const removed = this.tiles[idx];
+    this.tiles.splice(idx, 1);
+    if (this.winTileType === removed) {
+      // Check if still exists in hand
+      if (!this.tiles.includes(removed)) this.winTileType = -1;
+    }
+    this.render();
+  }
+
+  setWinTile(typeId) {
+    this.winTileType = (this.winTileType === typeId) ? -1 : typeId;
+    this.render();
+  }
+
+  toggleMeldMode(mode) {
+    if (this.meldMode === mode) {
+      this.meldMode = null;
+      document.getElementById('calc-add-pon').classList.remove('active');
+      document.getElementById('calc-add-chi').classList.remove('active');
+    } else {
+      this.meldMode = mode;
+      document.getElementById('calc-add-pon').classList.toggle('active', mode === 'pon');
+      document.getElementById('calc-add-chi').classList.toggle('active', mode === 'chi');
+    }
+  }
+
+  addPon(typeId) {
+    const used = this.getUsedCounts();
+    if (used[typeId] + 3 > 4) return;
+    if (this.getTotalTileCount() + 3 > 14) return;
+    this.melds.push({ type: 'pon', tiles: [typeId, typeId, typeId] });
+    this.meldMode = null;
+    document.getElementById('calc-add-pon').classList.remove('active');
+    document.getElementById('calc-add-chi').classList.remove('active');
+    this.render();
+  }
+
+  addChi(typeId) {
+    if (typeId >= 27) return; // honor tiles can't chi
+    const n = typeId % 9;
+    if (n > 6) return; // can't start a sequence from 8 or 9
+    const t1 = typeId, t2 = typeId + 1, t3 = typeId + 2;
+    const used = this.getUsedCounts();
+    if (used[t1] >= 4 || used[t2] >= 4 || used[t3] >= 4) return;
+    if (this.getTotalTileCount() + 3 > 14) return;
+    this.melds.push({ type: 'chi', tiles: [t1, t2, t3] });
+    this.meldMode = null;
+    document.getElementById('calc-add-pon').classList.remove('active');
+    document.getElementById('calc-add-chi').classList.remove('active');
+    this.render();
+  }
+
+  removeMeld(idx) {
+    const removed = this.melds[idx];
+    this.melds.splice(idx, 1);
+    // Check if win tile still valid
+    if (this.winTileType >= 0) {
+      const allTiles = [...this.tiles];
+      for (const m of this.melds) allTiles.push(...m.tiles);
+      if (!allTiles.includes(this.winTileType)) this.winTileType = -1;
+    }
+    this.render();
+  }
+
+  buildPicker() {
+    const picker = document.getElementById('calc-picker');
+    picker.innerHTML = '';
+    const rows = [
+      { label: '萬', start: 0, count: 9 },
+      { label: '筒', start: 9, count: 9 },
+      { label: '索', start: 18, count: 9 },
+      { label: '字', start: 27, count: 7 },
+    ];
+    for (const row of rows) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'calc-picker-row';
+      const lbl = document.createElement('span');
+      lbl.className = 'row-label';
+      lbl.textContent = row.label;
+      rowEl.appendChild(lbl);
+      for (let i = 0; i < row.count; i++) {
+        const typeId = row.start + i;
+        const tile = createTileEl(typeId);
+        tile.dataset.typeId = typeId;
+        tile.addEventListener('click', () => this.addTile(typeId));
+        rowEl.appendChild(tile);
+      }
+      picker.appendChild(rowEl);
+    }
+  }
+
+  render() {
+    this.renderHand();
+    this.renderMelds();
+    this.renderPicker();
+    this.renderInfo();
+  }
+
+  renderHand() {
+    const area = document.getElementById('calc-hand-area');
+    area.innerHTML = '';
+    for (let i = 0; i < this.tiles.length; i++) {
+      const t = this.tiles[i];
+      const tile = createTileEl(t);
+      if (t === this.winTileType) tile.classList.add('win-tile');
+      // × button for removal
+      const removeBtn = document.createElement('span');
+      removeBtn.className = 'tile-remove';
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.removeTile(i);
+      });
+      tile.appendChild(removeBtn);
+      tile.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.setWinTile(t);
+      });
+      tile.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        this.removeTile(i);
+      });
+      area.appendChild(tile);
+    }
+    if (this.tiles.length === 0) {
+      const hint = document.createElement('span');
+      hint.style.cssText = 'color:#666; font-size:13px;';
+      hint.textContent = '下の牌をクリックして追加';
+      area.appendChild(hint);
+    }
+  }
+
+  renderMelds() {
+    const row = document.getElementById('calc-melds-row');
+    // Remove existing meld groups (keep buttons)
+    row.querySelectorAll('.calc-meld-group').forEach(el => el.remove());
+    const btns = row.querySelector('.calc-meld-btns');
+    for (let i = 0; i < this.melds.length; i++) {
+      const m = this.melds[i];
+      const group = document.createElement('div');
+      group.className = 'calc-meld-group';
+      group.title = 'クリックで削除';
+      const label = document.createElement('span');
+      label.className = 'calc-meld-label';
+      label.textContent = m.type === 'pon' ? 'ポン' : 'チー';
+      group.appendChild(label);
+      for (const t of m.tiles) {
+        group.appendChild(createTileEl(t, { sm: true }));
+      }
+      group.addEventListener('click', () => this.removeMeld(i));
+      row.insertBefore(group, btns);
+    }
+  }
+
+  renderPicker() {
+    const used = this.getUsedCounts();
+    const picker = document.getElementById('calc-picker');
+    picker.querySelectorAll('.tile').forEach(tile => {
+      const typeId = Number(tile.dataset.typeId);
+      const remaining = 4 - used[typeId];
+      // Update badge
+      let badge = tile.querySelector('.tile-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'tile-badge';
+        tile.appendChild(badge);
+      }
+      badge.textContent = remaining;
+      tile.classList.toggle('disabled', remaining <= 0);
+    });
+  }
+
+  renderInfo() {
+    document.getElementById('calc-tile-count').textContent = this.getTotalTileCount();
+    const winDisplay = document.getElementById('calc-win-tile-display');
+    if (this.winTileType >= 0) {
+      winDisplay.innerHTML = `<span class="set">${tileName(this.winTileType)}</span>`;
+    } else {
+      winDisplay.textContent = '未選択';
+    }
+  }
+
+  calculate() {
+    const resultEl = document.getElementById('calc-result');
+    const innerEl = document.getElementById('calc-result-inner');
+    resultEl.classList.add('show');
+
+    // Validation
+    if (this.getTotalTileCount() !== 14) {
+      innerEl.innerHTML = '<p class="error-msg">手牌を合計14枚にしてください</p>';
+      return;
+    }
+    if (this.winTileType < 0) {
+      innerEl.innerHTML = '<p class="error-msg">和了牌をクリックして選択してください</p>';
+      return;
+    }
+
+    // Build counts for closed hand
+    const closedCounts = new Int32Array(34);
+    for (const t of this.tiles) closedCounts[t]++;
+
+    // Check win
+    const allCounts = new Int32Array(34);
+    for (let i = 0; i < 34; i++) allCounts[i] = closedCounts[i];
+    for (const m of this.melds) for (const t of m.tiles) allCounts[t]++;
+
+    if (!canWin(closedCounts)) {
+      innerEl.innerHTML = '<p class="error-msg">和了形になっていません</p>';
+      return;
+    }
+
+    // Build decompositions
+    const closedForDecomp = new Int32Array(34);
+    for (let i = 0; i < 34; i++) closedForDecomp[i] = closedCounts[i];
+    const decomps = allDecompositions(closedForDecomp, this.melds.length);
+    if (decomps.length === 0) {
+      innerEl.innerHTML = '<p class="error-msg">和了形になっていません</p>';
+      return;
+    }
+
+    // Build a pseudo Hand object for checkAllYaku
+    const pseudoHand = new Hand();
+    // Create pseudo UIDs for closed tiles
+    const uidCounters = new Int32Array(34);
+    for (const t of this.tiles) {
+      const uid = t * 4 + uidCounters[t];
+      uidCounters[t]++;
+      pseudoHand.closed.push(uid);
+    }
+    // Build meld objects
+    for (const m of this.melds) {
+      const meldUids = [];
+      for (const t of m.tiles) {
+        const uid = t * 4 + uidCounters[t];
+        uidCounters[t]++;
+        meldUids.push(uid);
+      }
+      pseudoHand.melds.push(new Meld(m.type, meldUids, true, 1));
+    }
+
+    // Win tile UID — use the first occurrence in closed hand
+    const winUid = this.winTileType * 4; // pseudo uid
+
+    const isTsumo = this.options.winMethod === 'tsumo';
+    const isMenzen = this.melds.length === 0;
+    const seatWind = this.options.seatWind;
+    const roundWind = this.options.roundWind;
+    const isRiichi = this.options.riichi && isMenzen;
+
+    // Check yaku
+    const yakuResult = checkAllYaku(decomps, pseudoHand, winUid, isTsumo,
+      seatWind, roundWind, isRiichi, false, allCounts);
+
+    if (yakuResult.han <= 0) {
+      innerEl.innerHTML = '<p class="error-msg">役がありません</p>';
+      return;
+    }
+
+    // Calculate score
+    const isDealer = this.options.isDealer;
+    const score = calcScore(yakuResult.han, yakuResult.fu, isDealer, isTsumo, 0, 0);
+
+    // Render result
+    let html = '<div class="yaku-list">';
+    for (const y of yakuResult.yaku) {
+      html += `<div class="yaku-item"><span class="yaku-name">${y.name}</span><span class="yaku-han">${y.han}翻</span></div>`;
+    }
+    html += '</div>';
+    html += `<div class="score-label">${score.label}</div>`;
+    html += `<div class="score-total">${score.total}点</div>`;
+    for (const p of score.payments) {
+      html += `<div class="score-detail">${p.label}: ${p.amount}点</div>`;
+    }
+    innerEl.innerHTML = html;
+  }
+}
+
+// ============================================================
+//  NAVIGATION
+// ============================================================
+let calculator = null;
+
+function showCalcScreen() {
+  document.getElementById('app').style.display = 'none';
+  const cs = document.getElementById('calc-screen');
+  cs.classList.add('show');
+  if (!calculator) {
+    calculator = new Calculator();
+  } else {
+    calculator.clear();
+  }
+}
+
+function showStart() {
+  document.getElementById('calc-screen').classList.remove('show');
+  document.getElementById('app').style.display = '';
+  document.getElementById('info-bar').style.display = 'none';
+  game.showStartScreen();
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+let game;
+
+function startGame() {
+  document.getElementById('info-bar').style.display = '';
+  game = new Game();
+  game.run();
+}
+
+// Show start screen on load
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('info-bar').style.display = 'none';
+  game = new Game();
+  game.showStartScreen();
+});
+</script>
+</body>
+</html>
