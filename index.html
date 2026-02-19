@@ -229,15 +229,30 @@ body {
 .calc-hand-area .tile.win-tile {
   border: 2px solid #ff4444; box-shadow: 0 0 8px rgba(255,68,68,0.6);
 }
-.tile-remove {
-  position: absolute; top: -6px; left: -6px;
-  width: 18px; height: 18px; border-radius: 50%;
-  background: #cc3333; color: #fff; border: 1px solid #991111;
-  font-size: 12px; line-height: 16px; text-align: center;
-  cursor: pointer; z-index: 20; display: none;
+.calc-hand-area .tile.calc-selected {
+  transform: translateY(-8px);
+  box-shadow: 0 0 10px rgba(230,194,0,0.8);
+  border-color: #e6c200;
 }
-.calc-hand-area .tile:hover .tile-remove { display: block; }
-.tile-remove:hover { background: #ff4444; transform: scale(1.2); }
+.calc-tile-actions {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 8px; min-height: 36px;
+}
+.calc-tile-actions .hint-text { color: #666; font-size: 13px; }
+.calc-tile-actions .action-btn-group { display: flex; gap: 6px; }
+.calc-tile-action-btn {
+  padding: 5px 14px; border: 1px solid #555; border-radius: 4px;
+  font-size: 13px; font-weight: bold; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.calc-tile-action-btn.btn-win {
+  background: #ff4444; color: #fff; border-color: #cc2222;
+}
+.calc-tile-action-btn.btn-win:hover { background: #ff6666; }
+.calc-tile-action-btn.btn-delete {
+  background: #555; color: #ddd; border-color: #444;
+}
+.calc-tile-action-btn.btn-delete:hover { background: #777; }
 
 /* Meld display */
 .calc-melds-row {
@@ -319,6 +334,29 @@ body {
 .calc-result .score-total { font-size: 28px; color: #ff4444; font-weight: bold; margin: 4px 0; }
 .calc-result .score-detail { color: #aaa; font-size: 13px; }
 
+/* Shanten display */
+.calc-shanten-label {
+  font-size: 18px; font-weight: bold; margin: 8px 0;
+}
+.calc-shanten-label.tenpai { color: #ff4444; }
+.calc-shanten-label.shanten { color: #e6c200; }
+.calc-wait-tiles {
+  display: flex; flex-wrap: wrap; gap: 3px; justify-content: center;
+  margin: 8px 0;
+}
+.calc-wait-tiles .tile { width: 32px; height: 44px; }
+.calc-wait-tiles .tile .t-top { font-size: 13px; }
+.calc-wait-tiles .tile .t-bot { font-size: 10px; }
+.calc-wait-tiles .tile .t-char { font-size: 19px; }
+.calc-riichi-badge {
+  display: inline-block; background: #4488ff; color: #fff;
+  padding: 2px 10px; border-radius: 4px; font-size: 13px;
+  font-weight: bold; margin-left: 8px;
+}
+.calc-discard-info {
+  color: #aaa; font-size: 13px; margin: 4px 0;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .tile { width: 30px; height: 42px; }
@@ -377,6 +415,7 @@ body {
       <span class="win-tile-label">和了牌: <span id="calc-win-tile-display">未選択</span></span>
     </div>
     <div class="calc-hand-area" id="calc-hand-area"></div>
+    <div class="calc-tile-actions" id="calc-tile-actions"></div>
     <div class="calc-melds-row" id="calc-melds-row">
       <div class="calc-meld-btns">
         <button class="calc-meld-btn" id="calc-add-pon">+ポン</button>
@@ -665,6 +704,113 @@ function getWaits(counts) {
 }
 
 function isTenpai(counts) { return getWaits(counts).length > 0; }
+
+// ============================================================
+//  SHANTEN CALCULATION
+// ============================================================
+function _searchSuit(counts, idx, mentsu, taatsu, best) {
+  // Search within one suit (9 tiles starting at idx)
+  while (idx < 9 && counts[idx] === 0) idx++;
+  if (idx >= 9) {
+    const val = mentsu * 2 + taatsu;
+    if (val > best[0]) best[0] = val;
+    return;
+  }
+  // Koutsu (triplet)
+  if (counts[idx] >= 3) {
+    counts[idx] -= 3;
+    _searchSuit(counts, idx, mentsu + 1, taatsu, best);
+    counts[idx] += 3;
+  }
+  // Shuntsu (sequence)
+  if (idx + 2 < 9 && counts[idx + 1] >= 1 && counts[idx + 2] >= 1) {
+    counts[idx]--; counts[idx + 1]--; counts[idx + 2]--;
+    _searchSuit(counts, idx, mentsu + 1, taatsu, best);
+    counts[idx]++; counts[idx + 1]++; counts[idx + 2]++;
+  }
+  // Toitsu (pair) as taatsu
+  if (counts[idx] >= 2) {
+    counts[idx] -= 2;
+    _searchSuit(counts, idx, mentsu, taatsu + 1, best);
+    counts[idx] += 2;
+  }
+  // Kanchan / penchan (adjacent pair for sequence)
+  if (idx + 1 < 9 && counts[idx + 1] >= 1) {
+    counts[idx]--; counts[idx + 1]--;
+    _searchSuit(counts, idx, mentsu, taatsu + 1, best);
+    counts[idx]++; counts[idx + 1]++;
+  }
+  if (idx + 2 < 9 && counts[idx + 2] >= 1) {
+    counts[idx]--; counts[idx + 2]--;
+    _searchSuit(counts, idx, mentsu, taatsu + 1, best);
+    counts[idx]++; counts[idx + 2]++;
+  }
+  // Skip this tile (use as isolated)
+  _searchSuit(counts, idx + 1, mentsu, taatsu, best);
+}
+
+function calcShantenRegular(counts, numOpenMelds) {
+  const targetMentsu = 4 - numOpenMelds;
+  let totalMentsuTaatsu = 0;
+
+  // Process each numbered suit
+  for (let s = 0; s < 3; s++) {
+    const suitCounts = new Array(9);
+    for (let i = 0; i < 9; i++) suitCounts[i] = counts[s * 9 + i];
+    const best = [0];
+    _searchSuit(suitCounts, 0, 0, 0, best);
+    totalMentsuTaatsu += best[0];
+  }
+
+  // Process honor tiles
+  for (let i = 27; i < 34; i++) {
+    if (counts[i] >= 3) totalMentsuTaatsu += 2; // koutsu = mentsu
+    else if (counts[i] >= 2) totalMentsuTaatsu += 1; // toitsu = taatsu
+  }
+
+  // Cap: mentsu + taatsu <= targetMentsu + 1 (extra 1 for jantai)
+  const maxUsable = targetMentsu + 1;
+  if (totalMentsuTaatsu > maxUsable * 2) totalMentsuTaatsu = maxUsable * 2;
+  // More precisely, we have some mentsu contribution and some taatsu
+  // shanten = (targetMentsu + 1) * 2 - 1 - totalMentsuTaatsu
+  // but capped at target
+  let shanten = (targetMentsu + 1) * 2 - 1 - totalMentsuTaatsu;
+  return shanten;
+}
+
+function calcShantenChitoitsu(counts) {
+  let pairs = 0;
+  let types = 0;
+  for (let i = 0; i < 34; i++) {
+    if (counts[i] >= 2) pairs++;
+    if (counts[i] >= 1) types++;
+  }
+  // Need 7 pairs from 7 different types
+  // If we have fewer than 7 types, we need more tiles
+  if (types < 7) pairs = Math.min(pairs, types);
+  return 6 - pairs;
+}
+
+function calcShantenKokushi(counts) {
+  const yaochu = [0,8,9,17,18,26,27,28,29,30,31,32,33];
+  let found = 0;
+  let hasPair = false;
+  for (const t of yaochu) {
+    if (counts[t] >= 1) found++;
+    if (counts[t] >= 2) hasPair = true;
+  }
+  return 13 - found - (hasPair ? 1 : 0);
+}
+
+function calcShanten13(counts, numOpenMelds) {
+  let shanten = calcShantenRegular(counts, numOpenMelds);
+  // Chitoitsu and kokushi only valid for menzen (no open melds)
+  if (numOpenMelds === 0) {
+    shanten = Math.min(shanten, calcShantenChitoitsu(counts));
+    shanten = Math.min(shanten, calcShantenKokushi(counts));
+  }
+  return shanten;
+}
 
 // ============================================================
 //  YAKU CHECKER
@@ -1881,6 +2027,7 @@ class Calculator {
     this.tiles = [];       // array of typeId (closed hand tiles)
     this.melds = [];       // array of {type:'pon'|'chi', tiles:[typeId,...]}
     this.winTileType = -1; // which tile in hand is the winning tile
+    this.selectedTileIdx = -1; // index of selected tile for actions
     this.options = {
       winMethod: 'tsumo',  // 'tsumo' | 'ron'
       isDealer: false,
@@ -1925,6 +2072,7 @@ class Calculator {
     this.tiles = [];
     this.melds = [];
     this.winTileType = -1;
+    this.selectedTileIdx = -1;
     this.meldMode = null;
     document.getElementById('calc-add-pon').classList.remove('active');
     document.getElementById('calc-add-chi').classList.remove('active');
@@ -1961,6 +2109,7 @@ class Calculator {
     if (this.tiles.length >= this.getMaxClosedTiles()) return;
     this.tiles.push(typeId);
     this.tiles.sort((a, b) => a - b);
+    this.selectedTileIdx = -1;
     this.render();
   }
 
@@ -1968,9 +2117,9 @@ class Calculator {
     const removed = this.tiles[idx];
     this.tiles.splice(idx, 1);
     if (this.winTileType === removed) {
-      // Check if still exists in hand
       if (!this.tiles.includes(removed)) this.winTileType = -1;
     }
+    this.selectedTileIdx = -1;
     this.render();
   }
 
@@ -2070,22 +2219,11 @@ class Calculator {
       const t = this.tiles[i];
       const tile = createTileEl(t);
       if (t === this.winTileType) tile.classList.add('win-tile');
-      // × button for removal
-      const removeBtn = document.createElement('span');
-      removeBtn.className = 'tile-remove';
-      removeBtn.textContent = '×';
-      removeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.removeTile(i);
-      });
-      tile.appendChild(removeBtn);
-      tile.addEventListener('click', (e) => {
-        e.preventDefault();
-        this.setWinTile(t);
-      });
-      tile.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        this.removeTile(i);
+      if (i === this.selectedTileIdx) tile.classList.add('calc-selected');
+      tile.addEventListener('click', () => {
+        this.selectedTileIdx = (this.selectedTileIdx === i) ? -1 : i;
+        this.renderHand();
+        this.renderTileActions();
       });
       area.appendChild(tile);
     }
@@ -2095,6 +2233,42 @@ class Calculator {
       hint.textContent = '下の牌をクリックして追加';
       area.appendChild(hint);
     }
+    this.renderTileActions();
+  }
+
+  renderTileActions() {
+    const el = document.getElementById('calc-tile-actions');
+    el.innerHTML = '';
+    if (this.tiles.length === 0) return;
+    if (this.selectedTileIdx < 0 || this.selectedTileIdx >= this.tiles.length) {
+      const hint = document.createElement('span');
+      hint.className = 'hint-text';
+      hint.textContent = '牌をタップして選択';
+      el.appendChild(hint);
+      return;
+    }
+    const idx = this.selectedTileIdx;
+    const t = this.tiles[idx];
+    const group = document.createElement('div');
+    group.className = 'action-btn-group';
+    // Win tile button
+    const winBtn = document.createElement('button');
+    winBtn.className = 'calc-tile-action-btn btn-win';
+    winBtn.textContent = (this.winTileType === t) ? '和了牌を解除' : '和了牌に設定';
+    winBtn.addEventListener('click', () => {
+      this.setWinTile(t);
+      this.selectedTileIdx = -1;
+    });
+    group.appendChild(winBtn);
+    // Delete button
+    const delBtn = document.createElement('button');
+    delBtn.className = 'calc-tile-action-btn btn-delete';
+    delBtn.textContent = '削除';
+    delBtn.addEventListener('click', () => {
+      this.removeTile(idx);
+    });
+    group.appendChild(delBtn);
+    el.appendChild(group);
   }
 
   renderMelds() {
@@ -2172,7 +2346,7 @@ class Calculator {
     for (const m of this.melds) for (const t of m.tiles) allCounts[t]++;
 
     if (!canWin(closedCounts)) {
-      innerEl.innerHTML = '<p class="error-msg">和了形になっていません</p>';
+      this.showShantenResult(closedCounts, innerEl);
       return;
     }
 
@@ -2238,6 +2412,92 @@ class Calculator {
     for (const p of score.payments) {
       html += `<div class="score-detail">${p.label}: ${p.amount}点</div>`;
     }
+    innerEl.innerHTML = html;
+  }
+
+  showShantenResult(closedCounts, innerEl) {
+    const numOpenMelds = this.melds.length;
+    const isMenzen = numOpenMelds === 0;
+
+    // For each tile we could discard, compute the shanten of the remaining 13 tiles
+    let bestShanten = 99;
+    const discardResults = []; // {discardType, shanten, waits}
+
+    // Get unique tile types in hand
+    const triedTypes = new Set();
+    for (let i = 0; i < this.tiles.length; i++) {
+      const dt = this.tiles[i];
+      if (triedTypes.has(dt)) continue;
+      triedTypes.add(dt);
+
+      // Remove one tile of this type and compute shanten
+      const tempCounts = new Int32Array(34);
+      for (let j = 0; j < 34; j++) tempCounts[j] = closedCounts[j];
+      tempCounts[dt]--;
+
+      const sh = calcShanten13(tempCounts, numOpenMelds);
+      if (sh < bestShanten) bestShanten = sh;
+      discardResults.push({ discardType: dt, shanten: sh, counts: tempCounts });
+    }
+
+    let html = '';
+
+    if (bestShanten === 0) {
+      // Tenpai
+      html += '<div class="calc-shanten-label tenpai">テンパイ';
+      if (isMenzen) html += '<span class="calc-riichi-badge">リーチ可能</span>';
+      html += '</div>';
+
+      // Show best discards and their waits
+      const bestDiscards = discardResults.filter(d => d.shanten === 0);
+      for (const bd of bestDiscards) {
+        const tempCounts = new Int32Array(34);
+        for (let j = 0; j < 34; j++) tempCounts[j] = closedCounts[j];
+        tempCounts[bd.discardType]--;
+        const waits = getWaits(tempCounts);
+        if (waits.length === 0) continue;
+
+        html += `<div class="calc-discard-info">打 ${tileName(bd.discardType)} → 待ち:</div>`;
+        html += '<div class="calc-wait-tiles">';
+        for (const w of waits) {
+          html += createTileEl(w).outerHTML;
+        }
+        html += '</div>';
+      }
+    } else if (bestShanten <= 3) {
+      html += `<div class="calc-shanten-label shanten">${bestShanten}シャンテン</div>`;
+
+      // Show acceptance tiles (tiles that reduce shanten)
+      const bestDiscards = discardResults.filter(d => d.shanten === bestShanten);
+
+      for (const bd of bestDiscards) {
+        const tempCounts = new Int32Array(34);
+        for (let j = 0; j < 34; j++) tempCounts[j] = closedCounts[j];
+        tempCounts[bd.discardType]--;
+
+        // Find tiles that reduce shanten when drawn
+        const accepts = [];
+        for (let t = 0; t < 34; t++) {
+          if (tempCounts[t] >= 4) continue;
+          tempCounts[t]++;
+          const newSh = calcShanten13(tempCounts, numOpenMelds);
+          if (newSh < bestShanten) accepts.push(t);
+          tempCounts[t]--;
+        }
+        if (accepts.length === 0) continue;
+
+        html += `<div class="calc-discard-info">打 ${tileName(bd.discardType)} → 受入 ${accepts.length}種:</div>`;
+        html += '<div class="calc-wait-tiles">';
+        for (const a of accepts) {
+          html += createTileEl(a).outerHTML;
+        }
+        html += '</div>';
+      }
+    } else {
+      html += `<div class="calc-shanten-label shanten">${bestShanten}シャンテン</div>`;
+      html += '<p style="color:#aaa;font-size:13px;margin-top:8px;">シャンテン数が大きいため受入牌の表示を省略しています</p>';
+    }
+
     innerEl.innerHTML = html;
   }
 }
